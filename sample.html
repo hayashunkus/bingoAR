@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スマイルビンゴ - Smile Bingo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap');
+
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+        }
+
+        .bingo-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .punched {
+            background-color: #fbbf24;
+            color: #78350f;
+            transform: scale(0.95);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .reaching {
+            border: 4px solid #ef4444;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .hidden-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .hidden-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-blue-100 to-purple-200 min-h-screen text-slate-800">
+
+    <!-- App Container -->
+    <div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden relative">
+
+        <!-- Header -->
+        <header class="bg-yellow-400 p-4 text-center shadow-md z-10 relative">
+            <h1 class="text-2xl font-extrabold text-white drop-shadow-md tracking-wider"><i
+                    class="fa-solid fa-face-laugh-squint mr-2"></i>スマイルビンゴ</h1>
+            <div id="connection-status"
+                class="text-xs text-yellow-800 font-bold mt-1 bg-yellow-300/50 inline-block px-2 py-0.5 rounded-full hidden">
+                <i class="fa-solid fa-wifi"></i> 接続中
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="main-content" class="p-4 pb-24 overflow-y-auto h-[calc(100vh-64px)]">
+            <!-- Loading State -->
+            <div id="loading-view" class="flex flex-col items-center justify-center h-full space-y-4">
+                <div class="animate-spin text-4xl text-yellow-500"><i class="fa-solid fa-circle-notch"></i></div>
+                <p>システム起動中...</p>
+            </div>
+
+            <!-- Lobby View -->
+            <div id="lobby-view" class="hidden flex flex-col space-y-6 pt-8">
+                <div class="text-center space-y-2">
+                    <p class="text-lg font-bold">ようこそ！</p>
+                    <p class="text-sm text-gray-500">名前を入力してゲームに参加しましょう</p>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold mb-1">ニックネーム</label>
+                        <input type="text" id="username-input"
+                            class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-yellow-400 outline-none text-lg"
+                            placeholder="例: たなか">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <button onclick="createGame()"
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-4 rounded-xl shadow-md transition transform active:scale-95">
+                            <i class="fa-solid fa-crown block text-2xl mb-2"></i>
+                            部屋を作る<br><span class="text-xs font-normal">(マスター)</span>
+                        </button>
+                        <button onclick="joinGamePrompt()"
+                            class="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-4 rounded-xl shadow-md transition transform active:scale-95">
+                            <i class="fa-solid fa-users block text-2xl mb-2"></i>
+                            参加する<br><span class="text-xs font-normal">(プレイヤー)</span>
+                        </button>
+                    </div>
+
+                    <div id="join-form"
+                        class="hidden space-y-4 bg-gray-50 p-4 rounded-lg border-2 border-gray-200 mt-4">
+                        <div>
+                            <label class="block text-sm font-bold mb-1">ルームID</label>
+                            <input type="text" id="room-id-input"
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-green-400 outline-none uppercase tracking-widest text-center text-xl"
+                                placeholder="A1B2">
+                        </div>
+                        <button onclick="joinGame()"
+                            class="w-full bg-green-500 text-white font-bold py-3 rounded-lg shadow">部屋に入る</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Waiting Room View -->
+            <div id="waiting-view" class="hidden flex flex-col items-center space-y-6 pt-10">
+                <div class="text-center">
+                    <p class="text-gray-500 text-sm">ルームID</p>
+                    <p id="display-room-id" class="text-4xl font-black tracking-widest text-blue-600 my-2">----</p>
+                    <p class="text-sm text-gray-500">このIDを参加者に伝えてください</p>
+                </div>
+
+                <div class="w-full bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <h3 class="font-bold border-b pb-2 mb-2 flex justify-between">
+                        参加者リスト <span id="player-count"
+                            class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">0人</span>
+                    </h3>
+                    <ul id="waiting-player-list" class="space-y-2 text-center text-lg max-h-40 overflow-y-auto">
+                        <!-- Players injected here -->
+                    </ul>
+                </div>
+
+                <div id="master-controls-waiting" class="hidden w-full">
+                    <button onclick="startGame()"
+                        class="w-full bg-yellow-400 hover:bg-yellow-500 text-white text-xl font-bold py-4 rounded-full shadow-lg border-b-4 border-yellow-600 active:border-b-0 active:translate-y-1 transition">
+                        ゲームスタート！
+                    </button>
+                </div>
+                <div id="player-msg-waiting" class="hidden text-center animate-pulse text-gray-500">
+                    マスターが開始するのを待っています...
+                </div>
+            </div>
+
+            <!-- Game View -->
+            <div id="game-view" class="hidden flex flex-col h-full">
+                <!-- Status Bar -->
+                <div
+                    class="bg-white rounded-xl shadow-lg p-4 mb-4 text-center border-4 border-yellow-100 relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-2 bg-gray-200">
+                        <div id="chance-progress-bar" class="h-full bg-pink-500 transition-all duration-500"
+                            style="width: 0%"></div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">現在の数字</p>
+                    <div id="current-number-display"
+                        class="text-6xl font-black text-slate-800 h-20 flex items-center justify-center">
+                        --
+                    </div>
+                    <div id="chance-indicator"
+                        class="hidden absolute inset-0 bg-pink-500 flex items-center justify-center flex-col text-white z-10">
+                        <p class="text-2xl font-bold animate-bounce">チャンスタイム！</p>
+                        <p id="chance-emotion-display" class="text-lg">お題: ???</p>
+                    </div>
+                </div>
+
+                <!-- Bingo Card Area -->
+                <div id="player-card-area" class="hidden flex-1 flex flex-col items-center">
+                    <div id="bingo-grid"
+                        class="grid grid-cols-5 gap-2 w-full max-w-[350px] bg-slate-200 p-2 rounded-xl shadow-inner">
+                        <!-- Grid generated by JS -->
+                    </div>
+                </div>
+
+                <!-- Master Control Area -->
+                <div id="master-game-controls" class="hidden space-y-4">
+                    <button id="draw-btn" onclick="drawNumber()"
+                        class="w-full bg-blue-500 text-white text-xl font-bold py-6 rounded-2xl shadow-lg border-b-4 border-blue-700 active:border-b-0 active:translate-y-1 transition">
+                        <i class="fa-solid fa-rotate mr-2"></i> ビンゴを回す
+                    </button>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-gray-100 p-2 rounded text-center">
+                            <span class="text-xs text-gray-500 block">残り数字</span>
+                            <span id="remaining-count" class="font-bold text-xl">50</span>
+                        </div>
+                        <div class="bg-gray-100 p-2 rounded text-center">
+                            <span class="text-xs text-gray-500 block">ビンゴ人数</span>
+                            <span id="master-status-count" class="font-bold text-xl">0</span>
+                        </div>
+                    </div>
+
+                    <button id="force-chance-btn" onclick="triggerChanceTime()"
+                        class="w-full bg-pink-500 text-white font-bold py-3 rounded-xl shadow border-b-4 border-pink-700 active:border-b-0 active:translate-y-1 transition text-sm">
+                        <i class="fa-solid fa-camera mr-1"></i> 強制チャンスタイム
+                    </button>
+
+                    <div class="bg-gray-50 p-3 rounded-lg text-left h-32 overflow-y-auto text-sm border">
+                        <p class="text-xs font-bold text-gray-400 mb-1">出た数字履歴:</p>
+                        <div id="drawn-history" class="flex flex-wrap gap-1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Camera Modal -->
+            <div id="camera-modal"
+                class="hidden fixed inset-0 bg-black z-50 flex flex-col items-center justify-center p-4">
+                <div class="text-white text-center mb-4">
+                    <h2 class="text-3xl font-bold text-yellow-400 mb-1">お題: <span id="camera-emotion-target">笑顔</span>
+                    </h2>
+                    <p class="text-sm">5秒以内にこの顔をして！</p>
+                </div>
+
+                <div
+                    class="relative w-full max-w-sm aspect-[3/4] bg-gray-900 rounded-xl overflow-hidden border-4 border-white shadow-2xl">
+                    <video id="camera-feed" class="w-full h-full object-cover" autoplay playsinline muted></video>
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div id="countdown-overlay" class="text-9xl font-bold text-white drop-shadow-lg opacity-80">5
+                        </div>
+                    </div>
+                    <div id="camera-flash"
+                        class="absolute inset-0 bg-white opacity-0 pointer-events-none transition-opacity duration-200">
+                    </div>
+                </div>
+
+                <div id="camera-status" class="text-white mt-4 font-bold text-lg animate-pulse">
+                    カメラ起動中...
+                </div>
+            </div>
+
+            <!-- Chance Result Modal -->
+            <div id="chance-result-modal"
+                class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                <div
+                    class="bg-white w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl transform scale-100 transition-transform">
+                    <h3 class="text-xl font-bold text-pink-500 mb-2">チャンスタイム結果!</h3>
+                    <div class="py-4">
+                        <p class="text-sm text-gray-500">ベスト表情賞</p>
+                        <p id="chance-winner-name" class="text-3xl font-black text-slate-800 my-2">???</p>
+                        <p class="text-4xl text-yellow-500 font-bold mb-2"><span id="chance-winner-score">0</span>点</p>
+                        <p class="text-xs text-gray-400">ご褒美として、この人に有利な数字が出やすくなります！</p>
+                    </div>
+                    <button onclick="closeChanceResult()"
+                        class="bg-blue-500 text-white font-bold py-3 px-8 rounded-full shadow hover:bg-blue-600">
+                        ゲームに戻る
+                    </button>
+                </div>
+            </div>
+
+            <!-- Bingo Modal -->
+            <div id="bingo-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                <div class="bg-white w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl border-4 border-yellow-400">
+                    <i class="fa-solid fa-trophy text-6xl text-yellow-400 mb-4"></i>
+                    <h3 class="text-4xl font-black text-slate-800 mb-2">BINGO!</h3>
+                    <p id="bingo-player-name" class="text-xl font-bold text-blue-600 mb-4">あなた</p>
+                    <p class="text-sm text-gray-500 mb-6">おめでとうございます！</p>
+                    <button onclick="document.getElementById('bingo-modal').classList.add('hidden')"
+                        class="bg-yellow-400 text-white font-bold py-3 px-8 rounded-full shadow hover:bg-yellow-500">
+                        閉じる
+                    </button>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Application Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- MOCK DATABASE ADAPTER (For Local Execution) ---
+        class MockDB {
+            constructor() {
+                this.listeners = new Map();
+                window.addEventListener('storage', (e) => {
+                    if (e.key === 'smile_bingo_db') {
+                        this.notifyListeners();
+                    }
+                });
+            }
+
+            _getData() {
+                return JSON.parse(localStorage.getItem('smile_bingo_db') || '{}');
+            }
+
+            _setData(data) {
+                localStorage.setItem('smile_bingo_db', JSON.stringify(data));
+                this.notifyListeners();
+            }
+
+            _getPath(pathArgs) {
+                // Flatten arguments into a path string
+                return pathArgs.map(arg => typeof arg === 'string' ? arg : arg.id).join('/');
+            }
+
+            doc(...args) { return { type: 'doc', path: this._getPath(args.slice(1)) }; }
+            collection(...args) { return { type: 'collection', path: this._getPath(args.slice(1)) }; }
+
+            async setDoc(ref, data) {
+                const db = this._getData();
+                db[ref.path] = { ...data, id: ref.path.split('/').pop() };
+                this._setData(db);
+            }
+
+            async updateDoc(ref, data) {
+                const db = this._getData();
+                if (db[ref.path]) {
+                    // Handle arrayUnion and increment mock
+                    const current = db[ref.path];
+                    for (const [key, val] of Object.entries(data)) {
+                        if (val && val._methodName === 'arrayUnion') {
+                            if (!current[key]) current[key] = [];
+                            val._elements.forEach(el => {
+                                if (!current[key].includes(el)) current[key].push(el);
+                            });
+                        } else if (val && val._methodName === 'increment') {
+                            current[key] = (current[key] || 0) + val._operand;
+                        } else {
+                            current[key] = val;
+                        }
+                    }
+                    this._setData(db);
+                }
+            }
+
+            async getDoc(ref) {
+                const db = this._getData();
+                const data = db[ref.path];
+                return {
+                    exists: () => !!data,
+                    data: () => data,
+                    id: ref.path.split('/').pop()
+                };
+            }
+
+            onSnapshot(ref, callback) {
+                const id = Math.random().toString();
+                this.listeners.set(id, { ref, callback });
+
+                // Initial callback
+                this._triggerSingle(ref, callback);
+
+                return () => this.listeners.delete(id);
+            }
+
+            notifyListeners() {
+                this.listeners.forEach(({ ref, callback }) => {
+                    this._triggerSingle(ref, callback);
+                });
+            }
+
+            _triggerSingle(ref, callback) {
+                const db = this._getData();
+                if (ref.type === 'doc') {
+                    const data = db[ref.path];
+                    callback({
+                        exists: () => !!data,
+                        data: () => data,
+                        id: ref.path.split('/').pop()
+                    });
+                } else {
+                    // Collection query
+                    const docs = Object.keys(db)
+                        .filter(k => k.startsWith(ref.path + '/'))
+                        .map(k => ({
+                            data: () => db[k],
+                            id: k.split('/').pop()
+                        }));
+                    callback({
+                        forEach: (fn) => docs.forEach(fn),
+                        empty: docs.length === 0
+                    });
+                }
+            }
+        }
+
+        // --- APP STATE & INIT ---
+        let db;
+        let authUser;
+        let isOnlineMode = false;
+
+        const appId = (typeof __app_id !== 'undefined') ? __app_id : 'smile-bingo';
+
+        async function initApp() {
+            const statusEl = document.getElementById('connection-status');
+
+            try {
+                // Try to use Real Firebase
+                if (typeof __firebase_config === 'undefined') {
+                    throw new Error("No config");
+                }
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                db = getFirestore(app);
+                authUser = auth.currentUser;
+                isOnlineMode = true;
+
+                statusEl.innerHTML = '<i class="fa-solid fa-cloud"></i> オンライン';
+                statusEl.classList.remove('hidden', 'bg-yellow-300/50');
+                statusEl.classList.add('bg-green-100', 'text-green-800');
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        authUser = user;
+                        switchView('lobby');
+                    }
+                });
+
+            } catch (e) {
+                console.warn("Firebase Init Failed, falling back to Local Mode:", e);
+
+                // Fallback to Mock DB
+                db = new MockDB();
+
+                // Mock Auth
+                let uid = sessionStorage.getItem('mock_uid');
+                if (!uid) {
+                    uid = 'user_' + Math.random().toString(36).substr(2, 9);
+                    sessionStorage.setItem('mock_uid', uid);
+                }
+                authUser = { uid: uid };
+
+                statusEl.innerHTML = '<i class="fa-solid fa-laptop"></i> ローカルモード';
+                statusEl.classList.remove('hidden', 'bg-yellow-300/50');
+                statusEl.classList.add('bg-gray-200', 'text-gray-700');
+
+                // Slight delay to simulate loading
+                setTimeout(() => switchView('lobby'), 500);
+            }
+        }
+
+        initApp();
+
+        // --- GLOBAL VARIABLES ---
+        let currentRoomId = null;
+        let isMaster = false;
+        let myCard = [];
+        let roomUnsubscribe = null;
+        let playersUnsubscribe = null;
+        let localDrawnNumbers = new Set();
+
+        // Game Constants
+        const MAX_NUMBER = 50;
+        const CHANCE_INTERVAL = 3;
+        const EMOTIONS = [
+            { id: 'laugh', label: '大爆笑' },
+            { id: 'cry', label: '泣き顔' },
+            { id: 'angry', label: '激怒' },
+            { id: 'serious', label: '真顔' }
+        ];
+
+        // --- DOM Elements ---
+        const views = {
+            loading: document.getElementById('loading-view'),
+            lobby: document.getElementById('lobby-view'),
+            waiting: document.getElementById('waiting-view'),
+            game: document.getElementById('game-view')
+        };
+
+        function switchView(viewName) {
+            Object.values(views).forEach(el => el.classList.add('hidden'));
+            views[viewName].classList.remove('hidden');
+        }
+
+        // --- Wrapper for Firestore Functions to support Mock ---
+        // Using dependency injection pattern via global 'db' object
+        const api = {
+            doc: (path, ...segments) => isOnlineMode ? doc(db, 'artifacts', appId, 'public', 'data', path, ...segments) : db.doc('artifacts', appId, 'public', 'data', path, ...segments),
+            collection: (path, ...segments) => isOnlineMode ? collection(db, 'artifacts', appId, 'public', 'data', path, ...segments) : db.collection('artifacts', appId, 'public', 'data', path, ...segments),
+            setDoc: (ref, data) => isOnlineMode ? setDoc(ref, data) : db.setDoc(ref, data),
+            updateDoc: (ref, data) => isOnlineMode ? updateDoc(ref, data) : db.updateDoc(ref, data),
+            getDoc: (ref) => isOnlineMode ? getDoc(ref) : db.getDoc(ref),
+            onSnapshot: (ref, cb) => isOnlineMode ? onSnapshot(ref, cb) : db.onSnapshot(ref, cb),
+            arrayUnion: (el) => isOnlineMode ? arrayUnion(el) : { _methodName: 'arrayUnion', _elements: [el] },
+            increment: (n) => isOnlineMode ? increment(n) : { _methodName: 'increment', _operand: n },
+            serverTimestamp: () => new Date().toISOString()
+        };
+
+        // --- GAME LOGIC ---
+
+        window.createGame = async () => {
+            const username = document.getElementById('username-input').value.trim() || 'マスター';
+            const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
+
+            try {
+                const roomRef = api.doc('rooms', roomId);
+                await api.setDoc(roomRef, {
+                    hostId: authUser.uid,
+                    status: 'waiting',
+                    numbers: [],
+                    currentNumber: null,
+                    drawCount: 0,
+                    chanceActive: false,
+                    createdAt: api.serverTimestamp()
+                });
+
+                isMaster = true;
+                currentRoomId = roomId;
+                document.getElementById('display-room-id').innerText = roomId;
+
+                setupRoomListeners(roomId);
+                switchView('waiting');
+
+                document.getElementById('master-controls-waiting').classList.remove('hidden');
+                document.getElementById('master-game-controls').classList.remove('hidden');
+                document.getElementById('player-card-area').classList.add('hidden');
+
+            } catch (e) {
+                console.error(e);
+                alert("ルーム作成に失敗しました");
+            }
+        };
+
+        window.joinGamePrompt = () => {
+            document.getElementById('join-form').classList.remove('hidden');
+        };
+
+        window.joinGame = async () => {
+            const username = document.getElementById('username-input').value.trim() || 'プレイヤー';
+            const roomId = document.getElementById('room-id-input').value.trim().toUpperCase();
+
+            if (!roomId) return alert("ルームIDを入力してください");
+
+            try {
+                const roomRef = api.doc('rooms', roomId);
+                const roomSnap = await api.getDoc(roomRef);
+
+                if (!roomSnap.exists()) {
+                    return alert("ルームが見つかりません。IDを確認してください。");
+                }
+
+                myCard = generateBingoCard();
+
+                // Add Player
+                const playerRef = api.doc('rooms', roomId, 'players', authUser.uid);
+                await api.setDoc(playerRef, {
+                    name: username,
+                    card: myCard.flat(),
+                    joinedAt: api.serverTimestamp(),
+                    score: 0,
+                    bingo: false
+                });
+
+                currentRoomId = roomId;
+                isMaster = false;
+
+                renderBingoCard(myCard);
+                setupRoomListeners(roomId);
+                switchView('waiting');
+
+                document.getElementById('player-msg-waiting').classList.remove('hidden');
+                document.getElementById('player-card-area').classList.remove('hidden');
+            } catch (e) {
+                console.error(e);
+                alert("参加に失敗しました: " + e.message);
+            }
+        };
+
+        function setupRoomListeners(roomId) {
+            const roomRef = api.doc('rooms', roomId);
+            roomUnsubscribe = api.onSnapshot(roomRef, (doc) => {
+                if (!doc.exists()) return;
+                handleRoomUpdate(doc.data());
+            });
+
+            const playersRef = api.collection('rooms', roomId, 'players');
+            playersUnsubscribe = api.onSnapshot(playersRef, (snapshot) => {
+                const listEl = document.getElementById('waiting-player-list');
+                listEl.innerHTML = '';
+                let bingoCount = 0;
+                let playerCount = 0;
+
+                snapshot.forEach(p => {
+                    const pData = p.data();
+                    playerCount++;
+                    const li = document.createElement('li');
+                    li.className = "bg-white p-2 rounded shadow-sm flex justify-between px-4 items-center";
+                    li.innerHTML = `<span class="font-bold">${pData.name}</span>${pData.bingo ? '<span class="bg-yellow-400 text-white text-xs px-2 py-1 rounded-full animate-pulse">BINGO!</span>' : ''}`;
+                    listEl.appendChild(li);
+                    if (pData.bingo) bingoCount++;
+                });
+
+                document.getElementById('player-count').innerText = `${playerCount}人`;
+                document.getElementById('master-status-count').innerText = bingoCount;
+            });
+        }
+
+        function handleRoomUpdate(data) {
+            if (data.status === 'active' && !views.game.classList.contains('hidden') === false) {
+                switchView('game');
+            }
+
+            if (data.currentNumber) {
+                document.getElementById('current-number-display').innerText = data.currentNumber;
+
+                if (!localDrawnNumbers.has(data.currentNumber)) {
+                    localDrawnNumbers.add(data.currentNumber);
+                    const histEl = document.getElementById('drawn-history');
+                    const badge = document.createElement('span');
+                    badge.className = "inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded m-0.5";
+                    badge.innerText = data.currentNumber;
+                    histEl.prepend(badge);
+
+                    if (!isMaster) markNumber(data.currentNumber);
+                }
+            }
+
+            document.getElementById('remaining-count').innerText = MAX_NUMBER - (data.numbers ? data.numbers.length : 0);
+
+            const progress = ((data.drawCount || 0) % CHANCE_INTERVAL) / CHANCE_INTERVAL * 100;
+            document.getElementById('chance-progress-bar').style.width = `${progress}%`;
+
+            if (data.chanceActive) {
+                if (document.getElementById('camera-modal').classList.contains('hidden')) {
+                    startChanceTimeUI(data.chanceTarget, data.chanceId);
+                }
+                document.getElementById('chance-indicator').classList.remove('hidden');
+                document.getElementById('chance-emotion-display').innerText = `お題: ${data.chanceTarget}`;
+            } else {
+                document.getElementById('camera-modal').classList.add('hidden');
+                document.getElementById('chance-indicator').classList.add('hidden');
+            }
+
+            if (data.chanceWinnerName && data.showChanceResult) {
+                document.getElementById('chance-winner-name').innerText = data.chanceWinnerName;
+                document.getElementById('chance-winner-score').innerText = data.chanceWinnerScore || 0;
+                document.getElementById('chance-result-modal').classList.remove('hidden');
+            } else {
+                document.getElementById('chance-result-modal').classList.add('hidden');
+            }
+        }
+
+        window.startGame = async () => {
+            if (!isMaster) return;
+            await api.updateDoc(api.doc('rooms', currentRoomId), { status: 'active' });
+        };
+
+        window.drawNumber = async () => {
+            if (!isMaster) return;
+            const roomRef = api.doc('rooms', currentRoomId);
+            const roomSnap = await api.getDoc(roomRef);
+            const data = roomSnap.data();
+
+            if (data.chanceActive) return alert("チャンスタイム中です！");
+
+            let nextNum;
+            let availableNumbers = [];
+            for (let i = 1; i <= MAX_NUMBER; i++) {
+                if (!data.numbers || !data.numbers.includes(i)) availableNumbers.push(i);
+            }
+            if (availableNumbers.length === 0) return alert("終了");
+
+            // RIGGING LOGIC (Simplified)
+            if (data.nextRiggedPlayerId) {
+                // In local mock, this fetch might need robustness, but generally works
+                try {
+                    const pSnap = await api.getDoc(api.doc('rooms', currentRoomId, 'players', data.nextRiggedPlayerId));
+                    if (pSnap.exists()) {
+                        const pCard = pSnap.data().card;
+                        const helpful = pCard.filter(n => n !== 0 && availableNumbers.includes(n));
+                        if (helpful.length > 0) nextNum = helpful[Math.floor(Math.random() * helpful.length)];
+                    }
+                } catch (e) { }
+                await api.updateDoc(roomRef, { nextRiggedPlayerId: null });
+            }
+
+            if (!nextNum) {
+                nextNum = availableNumbers[Math.floor(Math.random() * availableNumbers.length)];
+            }
+
+            await api.updateDoc(roomRef, {
+                numbers: api.arrayUnion(nextNum),
+                currentNumber: nextNum,
+                drawCount: api.increment(1),
+                showChanceResult: false
+            });
+
+            // Trigger chance logic
+            const newCount = (data.drawCount || 0) + 1;
+            if (newCount > 0 && newCount % CHANCE_INTERVAL === 0) {
+                setTimeout(() => triggerChanceTime(), 3000);
+            }
+        };
+
+        window.triggerChanceTime = async () => {
+            if (!isMaster) return;
+            const emotion = EMOTIONS[Math.floor(Math.random() * EMOTIONS.length)];
+            const chanceId = Date.now().toString();
+
+            await api.updateDoc(api.doc('rooms', currentRoomId), {
+                chanceActive: true,
+                chanceTarget: emotion.label,
+                chanceId: chanceId,
+                chanceEndsAt: Date.now() + 10000
+            });
+
+            setTimeout(() => endChanceTime(), 8000);
+        };
+
+        async function endChanceTime() {
+            if (!isMaster) return;
+            // Mock ending
+            await api.updateDoc(api.doc('rooms', currentRoomId), {
+                chanceActive: false,
+                showChanceResult: true,
+                chanceWinnerName: "プレイヤー (集計完了)",
+                chanceWinnerScore: Math.floor(Math.random() * 30) + 70,
+            });
+        }
+
+        window.closeChanceResult = async () => {
+            if (isMaster) {
+                await api.updateDoc(api.doc('rooms', currentRoomId), { showChanceResult: false });
+            } else {
+                document.getElementById('chance-result-modal').classList.add('hidden');
+            }
+        };
+
+        // --- Camera & Scoring ---
+        let videoStream = null;
+
+        async function startChanceTimeUI(targetEmotion, chanceId) {
+            const modal = document.getElementById('camera-modal');
+            const video = document.getElementById('camera-feed');
+            const overlay = document.getElementById('countdown-overlay');
+            const flash = document.getElementById('camera-flash');
+
+            document.getElementById('camera-emotion-target').innerText = targetEmotion;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+                video.srcObject = videoStream;
+            } catch (e) {
+                console.error("Camera failed", e);
+                document.getElementById('camera-status').innerText = "カメラなしでプレイ中";
+            }
+
+            let count = 5;
+            overlay.innerText = count;
+            const timer = setInterval(() => {
+                count--;
+                overlay.innerText = count;
+                if (count <= 0) {
+                    clearInterval(timer);
+                    flash.style.opacity = 1;
+                    setTimeout(() => flash.style.opacity = 0, 200);
+                    captureAndScore(chanceId);
+                }
+            }, 1000);
+        }
+
+        async function captureAndScore(chanceId) {
+            document.getElementById('camera-status').innerText = "採点中...";
+            if (videoStream) videoStream.getTracks().forEach(track => track.stop());
+
+            const score = Math.floor(Math.random() * 40) + 60;
+            document.getElementById('camera-status').innerText = `${score}点 送信!`;
+
+            if (!isMaster) {
+                const pRef = api.doc('rooms', currentRoomId, 'players', authUser.uid);
+                await api.updateDoc(pRef, { lastChanceId: chanceId, lastChanceScore: score });
+            }
+
+            setTimeout(() => {
+                document.getElementById('camera-modal').classList.add('hidden');
+                document.getElementById('camera-modal').classList.remove('flex');
+            }, 1500);
+        }
+
+        // --- Bingo Card Logic ---
+        function generateBingoCard() {
+            const card = [[], [], [], [], []];
+            for (let col = 0; col < 5; col++) {
+                const min = col * 10 + 1;
+                const max = (col + 1) * 10;
+                const nums = [];
+                while (nums.length < 5) {
+                    const n = Math.floor(Math.random() * (max - min + 1)) + min;
+                    if (!nums.includes(n)) nums.push(n);
+                }
+                card[col] = nums;
+            }
+            const rows = [];
+            for (let r = 0; r < 5; r++) {
+                const row = [];
+                for (let c = 0; c < 5; c++) {
+                    if (r === 2 && c === 2) row.push(0);
+                    else row.push(card[c][r]);
+                }
+                rows.push(row);
+            }
+            return rows;
+        }
+
+        function renderBingoCard(cardData) {
+            const grid = document.getElementById('bingo-grid');
+            grid.innerHTML = '';
+            cardData.forEach(row => {
+                row.forEach(num => {
+                    const cell = document.createElement('div');
+                    cell.className = "bingo-cell bg-white rounded-lg text-xl font-bold text-slate-700 shadow-sm relative cursor-pointer select-none";
+                    if (num === 0) {
+                        cell.classList.add('punched', 'bg-yellow-200');
+                        cell.innerHTML = '<i class="fa-solid fa-star text-yellow-500"></i>';
+                    } else {
+                        cell.innerText = num;
+                        cell.id = `cell-${num}`;
+                        if (localDrawnNumbers.has(num)) cell.classList.add('punched');
+                    }
+                    grid.appendChild(cell);
+                });
+            });
+        }
+
+        function markNumber(num) {
+            const cell = document.getElementById(`cell-${num}`);
+            if (cell) {
+                cell.classList.add('punched');
+                checkBingoInternal();
+            }
+        }
+
+        async function checkBingoInternal() {
+            let isBingo = false;
+            const grid = myCard;
+            const isPunched = (n) => n === 0 || localDrawnNumbers.has(n);
+
+            for (let r = 0; r < 5; r++) if (grid[r].every(isPunched)) isBingo = true;
+            for (let c = 0; c < 5; c++) if ([0, 1, 2, 3, 4].map(r => grid[r][c]).every(isPunched)) isBingo = true;
+            if ([0, 1, 2, 3, 4].map(i => grid[i][i]).every(isPunched)) isBingo = true;
+            if ([0, 1, 2, 3, 4].map(i => grid[i][4 - i]).every(isPunched)) isBingo = true;
+
+            if (isBingo) {
+                document.getElementById('bingo-modal').classList.remove('hidden');
+                await api.updateDoc(api.doc('rooms', currentRoomId, 'players', authUser.uid), { bingo: true });
+            }
+        }
+    </script>
+</body>
+
+</html>

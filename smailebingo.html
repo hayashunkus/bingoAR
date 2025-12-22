@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スマイルビンゴ - Smile Bingo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap');
+
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+        }
+
+        .bingo-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        /* 穴が開いたマスのスタイル（青色） */
+        .punched {
+            background-color: #3b82f6 !important;
+            color: white !important;
+            transform: scale(0.95);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* ビンゴ成立時のスタイル（赤色で強調） */
+        .bingo-win {
+            background-color: #ef4444 !important;
+            color: white !important;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.8);
+            transform: scale(1.05) !important;
+            z-index: 10;
+            animation: bounce 0.6s infinite alternate;
+        }
+
+        @keyframes bounce {
+            0% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1.1);
+            }
+        }
+
+        .hidden-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .hidden-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-blue-100 to-purple-200 min-h-screen text-slate-800">
+
+    <!-- App Container -->
+    <div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden relative">
+
+        <!-- Header -->
+        <header class="bg-yellow-400 p-4 text-center shadow-md z-10 relative">
+            <h1 class="text-2xl font-extrabold text-white drop-shadow-md tracking-wider"><i
+                    class="fa-solid fa-face-laugh-squint mr-2"></i>スマイルビンゴ</h1>
+            <div id="connection-status"
+                class="text-xs text-yellow-800 font-bold mt-1 bg-yellow-300/50 inline-block px-2 py-0.5 rounded-full hidden">
+                <i class="fa-solid fa-wifi"></i> 接続中
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="main-content" class="p-4 pb-24 overflow-y-auto h-[calc(100vh-64px)]">
+            <!-- Loading State -->
+            <div id="loading-view" class="flex flex-col items-center justify-center h-full space-y-4">
+                <div class="animate-spin text-4xl text-yellow-500"><i class="fa-solid fa-circle-notch"></i></div>
+                <p>システム起動中...</p>
+            </div>
+
+            <!-- Lobby View -->
+            <div id="lobby-view" class="hidden flex flex-col space-y-6 pt-8">
+                <div class="text-center space-y-2">
+                    <p class="text-lg font-bold">ようこそ！</p>
+                    <p class="text-sm text-gray-500">名前を入力してゲームに参加しましょう</p>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold mb-1">ニックネーム</label>
+                        <input type="text" id="username-input"
+                            class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-yellow-400 outline-none text-lg"
+                            placeholder="例: たなか">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <button onclick="createGame()"
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-4 rounded-xl shadow-md transition transform active:scale-95">
+                            <i class="fa-solid fa-crown block text-2xl mb-2"></i>
+                            部屋を作る<br><span class="text-xs font-normal">(マスター)</span>
+                        </button>
+                        <button onclick="joinGamePrompt()"
+                            class="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-4 rounded-xl shadow-md transition transform active:scale-95">
+                            <i class="fa-solid fa-users block text-2xl mb-2"></i>
+                            参加する<br><span class="text-xs font-normal">(プレイヤー)</span>
+                        </button>
+                    </div>
+
+                    <div id="join-form"
+                        class="hidden space-y-4 bg-gray-50 p-4 rounded-lg border-2 border-gray-200 mt-4">
+                        <div>
+                            <label class="block text-sm font-bold mb-1">ルームID</label>
+                            <input type="text" id="room-id-input"
+                                class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-green-400 outline-none uppercase tracking-widest text-center text-xl"
+                                placeholder="A1B2">
+                        </div>
+                        <button onclick="joinGame()"
+                            class="w-full bg-green-500 text-white font-bold py-3 rounded-lg shadow">部屋に入る</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Waiting Room View -->
+            <div id="waiting-view" class="hidden flex flex-col items-center space-y-6 pt-10">
+                <div class="text-center">
+                    <p class="text-gray-500 text-sm">ルームID</p>
+                    <p id="display-room-id" class="text-4xl font-black tracking-widest text-blue-600 my-2">----</p>
+                    <p class="text-sm text-gray-500">このIDを参加者に伝えてください</p>
+                </div>
+
+                <div class="w-full bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <h3 class="font-bold border-b pb-2 mb-2 flex justify-between">
+                        参加者リスト <span id="player-count"
+                            class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">0人</span>
+                    </h3>
+                    <ul id="waiting-player-list" class="space-y-2 text-center text-lg max-h-40 overflow-y-auto">
+                        <!-- Players injected here -->
+                    </ul>
+                </div>
+
+                <div id="master-controls-waiting" class="hidden w-full">
+                    <button onclick="startGame()"
+                        class="w-full bg-yellow-400 hover:bg-yellow-500 text-white text-xl font-bold py-4 rounded-full shadow-lg border-b-4 border-yellow-600 active:border-b-0 active:translate-y-1 transition">
+                        ゲームスタート！
+                    </button>
+                </div>
+                <div id="player-msg-waiting" class="hidden text-center animate-pulse text-gray-500">
+                    マスターが開始するのを待っています...
+                </div>
+            </div>
+
+            <!-- Game View -->
+            <div id="game-view" class="hidden flex flex-col h-full">
+                <!-- Status Bar -->
+                <div
+                    class="bg-white rounded-xl shadow-lg p-4 mb-4 text-center border-4 border-yellow-100 relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-2 bg-gray-200">
+                        <div id="chance-progress-bar" class="h-full bg-pink-500 transition-all duration-500"
+                            style="width: 0%"></div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">現在の数字</p>
+                    <div id="current-number-display"
+                        class="text-6xl font-black text-slate-800 h-20 flex items-center justify-center">
+                        --
+                    </div>
+                    <!-- Master view status -->
+                    <div id="master-chance-status"
+                        class="hidden absolute inset-0 bg-pink-500 flex items-center justify-center flex-col text-white z-20">
+                        <p class="text-xl font-bold animate-pulse">チャンスタイム中...</p>
+                        <p class="text-sm">プレイヤーが表情を作成しています</p>
+                        <button onclick="forceEndChance()"
+                            class="mt-4 bg-white text-pink-500 px-4 py-2 rounded-full text-xs font-bold shadow hover:bg-gray-100">
+                            強制終了
+                        </button>
+                    </div>
+                    <!-- Player view indicator -->
+                    <div id="chance-indicator"
+                        class="hidden absolute inset-0 bg-pink-500 flex items-center justify-center flex-col text-white z-10">
+                        <p class="text-2xl font-bold animate-bounce">チャンスタイム！</p>
+                        <p id="chance-emotion-display" class="text-lg">お題: ???</p>
+                    </div>
+                </div>
+
+                <!-- Bingo Card Area -->
+                <div id="player-card-area" class="hidden flex-1 flex flex-col items-center">
+                    <div id="finish-message"
+                        class="hidden text-center p-4 bg-yellow-100 rounded-lg mb-4 text-yellow-800 font-bold">
+                        <i class="fa-solid fa-flag-checkered"></i> ビンゴ達成！観戦中...
+                    </div>
+                    <div id="bingo-grid"
+                        class="grid grid-cols-5 gap-2 w-full max-w-[350px] bg-slate-200 p-2 rounded-xl shadow-inner">
+                        <!-- Grid generated by JS -->
+                    </div>
+                </div>
+
+                <!-- Master Control Area -->
+                <div id="master-game-controls" class="hidden space-y-4">
+                    <button id="draw-btn" onclick="drawNumber()"
+                        class="w-full bg-blue-500 text-white text-xl font-bold py-6 rounded-2xl shadow-lg border-b-4 border-blue-700 active:border-b-0 active:translate-y-1 transition">
+                        <i class="fa-solid fa-rotate mr-2"></i> ビンゴを回す
+                    </button>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-gray-100 p-2 rounded text-center">
+                            <span class="text-xs text-gray-500 block">残り数字</span>
+                            <span id="remaining-count" class="font-bold text-xl">50</span>
+                        </div>
+                        <div class="bg-gray-100 p-2 rounded text-center">
+                            <span class="text-xs text-gray-500 block">ビンゴ人数</span>
+                            <span id="master-status-count" class="font-bold text-xl">0</span>
+                        </div>
+                    </div>
+
+                    <button id="force-chance-btn" onclick="triggerChanceTime()"
+                        class="w-full bg-pink-500 text-white font-bold py-3 rounded-xl shadow border-b-4 border-pink-700 active:border-b-0 active:translate-y-1 transition text-sm">
+                        <i class="fa-solid fa-camera mr-1"></i> 強制チャンスタイム
+                    </button>
+
+                    <div class="bg-gray-50 p-3 rounded-lg text-left h-32 overflow-y-auto text-sm border">
+                        <p class="text-xs font-bold text-gray-400 mb-1">出た数字履歴:</p>
+                        <div id="drawn-history" class="flex flex-wrap gap-1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Camera / Action Modal -->
+            <div id="camera-modal"
+                class="hidden fixed inset-0 bg-black z-50 flex flex-col items-center justify-center p-4">
+                <!-- Selection Phase -->
+                <div id="camera-select-phase" class="text-center w-full max-w-sm">
+                    <h2 class="text-3xl font-bold text-yellow-400 mb-2">チャンスタイム！</h2>
+                    <p class="text-white mb-6">お題: <span id="camera-emotion-target" class="text-xl font-bold">笑顔</span>
+                    </p>
+
+                    <button onclick="startCameraMode()"
+                        class="w-full bg-pink-500 text-white font-bold py-4 rounded-xl mb-3 shadow-lg flex items-center justify-center">
+                        <i class="fa-solid fa-camera text-2xl mr-2"></i> カメラで挑戦<br><span
+                            class="text-xs font-normal ml-2">(高得点のチャンス！)</span>
+                    </button>
+                    <button onclick="startManualMode()"
+                        class="w-full bg-gray-700 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center">
+                        <i class="fa-solid fa-hand-pointer text-xl mr-2"></i> カメラなしで挑戦<br><span
+                            class="text-xs font-normal ml-2">(タップ連打)</span>
+                    </button>
+                </div>
+
+                <!-- Camera Phase -->
+                <div id="camera-active-phase"
+                    class="hidden relative w-full max-w-sm aspect-[3/4] bg-gray-900 rounded-xl overflow-hidden border-4 border-white shadow-2xl">
+                    <video id="camera-feed" class="w-full h-full object-cover" autoplay playsinline muted></video>
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div id="countdown-overlay" class="text-9xl font-bold text-white drop-shadow-lg opacity-80">5
+                        </div>
+                    </div>
+                    <div id="camera-flash"
+                        class="absolute inset-0 bg-white opacity-0 pointer-events-none transition-opacity duration-200">
+                    </div>
+                </div>
+
+                <!-- Manual Phase -->
+                <div id="manual-active-phase" class="hidden w-full max-w-sm text-center">
+                    <p class="text-white mb-4">ボタンを連打してアピールしろ！</p>
+                    <button id="mash-btn" onclick="mashButton()"
+                        class="w-40 h-40 rounded-full bg-yellow-500 border-b-8 border-yellow-700 active:border-b-0 active:translate-y-2 text-white font-black text-2xl shadow-xl transition-all">
+                        PUSH!
+                    </button>
+                    <p id="mash-count" class="text-white text-3xl mt-4 font-bold">0</p>
+                </div>
+
+                <div id="camera-status" class="text-white mt-4 font-bold text-lg animate-pulse hidden">
+                    採点中...
+                </div>
+            </div>
+
+            <!-- Chance Result Modal -->
+            <div id="chance-result-modal"
+                class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                <div
+                    class="bg-white w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl transform scale-100 transition-transform">
+                    <h3 class="text-xl font-bold text-pink-500 mb-2">チャンスタイム結果!</h3>
+                    <div class="py-4">
+                        <p class="text-sm text-gray-500">今回の勝者</p>
+                        <p id="chance-winner-name" class="text-3xl font-black text-slate-800 my-2">???</p>
+                        <p class="text-4xl text-yellow-500 font-bold mb-2"><span id="chance-winner-score">0</span>点</p>
+                        <p class="text-xs text-gray-400">この人に有利な数字が出やすくなります！</p>
+                    </div>
+                    <button onclick="closeChanceResult()"
+                        class="bg-blue-500 text-white font-bold py-3 px-8 rounded-full shadow hover:bg-blue-600">
+                        閉じる
+                    </button>
+                </div>
+            </div>
+
+            <!-- Bingo Modal -->
+            <div id="bingo-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                <div class="bg-white w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl border-4 border-yellow-400">
+                    <i class="fa-solid fa-trophy text-6xl text-yellow-400 mb-4"></i>
+                    <h3 class="text-4xl font-black text-slate-800 mb-2">BINGO!</h3>
+                    <p id="bingo-player-name" class="text-xl font-bold text-blue-600 mb-4">あなた</p>
+                    <p class="text-sm text-gray-500 mb-6">おめでとうございます！</p>
+
+                    <div class="grid grid-cols-1 gap-3">
+                        <button onclick="continueGame()"
+                            class="bg-blue-500 text-white font-bold py-3 px-8 rounded-full shadow hover:bg-blue-600">
+                            ゲームを続ける
+                        </button>
+                        <button onclick="finishGame()"
+                            class="bg-gray-500 text-white font-bold py-3 px-8 rounded-full shadow hover:bg-gray-600">
+                            上がり（終了）
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Application Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- MOCK DATABASE ADAPTER ---
+        class MockDB {
+            constructor() {
+                this.listeners = new Map();
+                window.addEventListener('storage', (e) => {
+                    if (e.key === 'smile_bingo_db') this.notifyListeners();
+                });
+            }
+
+            _getData() { return JSON.parse(localStorage.getItem('smile_bingo_db') || '{}'); }
+            _setData(data) { localStorage.setItem('smile_bingo_db', JSON.stringify(data)); this.notifyListeners(); }
+            _getPath(pathArgs) { return pathArgs.map(arg => typeof arg === 'string' ? arg : arg.id).join('/'); }
+
+            doc(...args) { return { type: 'doc', path: this._getPath(args.slice(1)) }; }
+            collection(...args) { return { type: 'collection', path: this._getPath(args.slice(1)) }; }
+
+            async setDoc(ref, data) {
+                const db = this._getData();
+                db[ref.path] = { ...data, id: ref.path.split('/').pop() };
+                this._setData(db);
+            }
+
+            async updateDoc(ref, data) {
+                const db = this._getData();
+                if (db[ref.path]) {
+                    const current = db[ref.path];
+                    for (const [key, val] of Object.entries(data)) {
+                        if (val && val._methodName === 'arrayUnion') {
+                            if (!current[key]) current[key] = [];
+                            val._elements.forEach(el => { if (!current[key].includes(el)) current[key].push(el); });
+                        } else if (val && val._methodName === 'increment') {
+                            current[key] = (current[key] || 0) + val._operand;
+                        } else {
+                            current[key] = val;
+                        }
+                    }
+                    this._setData(db);
+                }
+            }
+
+            async getDoc(ref) {
+                const db = this._getData();
+                const data = db[ref.path];
+                return { exists: () => !!data, data: () => data, id: ref.path.split('/').pop() };
+            }
+
+            onSnapshot(ref, callback) {
+                const id = Math.random().toString();
+                this.listeners.set(id, { ref, callback });
+                setTimeout(() => this._triggerSingle(ref, callback), 0); // Async simulation
+                return () => this.listeners.delete(id);
+            }
+
+            notifyListeners() {
+                this.listeners.forEach(({ ref, callback }) => this._triggerSingle(ref, callback));
+            }
+
+            _triggerSingle(ref, callback) {
+                const db = this._getData();
+                if (ref.type === 'doc') {
+                    const data = db[ref.path];
+                    callback({ exists: () => !!data, data: () => data, id: ref.path.split('/').pop() });
+                } else {
+                    const docs = Object.keys(db).filter(k => k.startsWith(ref.path + '/')).map(k => ({ data: () => db[k], id: k.split('/').pop() }));
+                    callback({ forEach: (fn) => docs.forEach(fn), empty: docs.length === 0, docs });
+                }
+            }
+        }
+
+        // --- APP STATE ---
+        let db, authUser, isOnlineMode = false;
+        // ユーザー提供のFirebase設定
+        const firebaseConfig = {
+            apiKey: "AIzaSyADIGqB8WzFuUSLBelYbUVJArPXCpC2hHk",
+            authDomain: "smile-bingo.firebaseapp.com",
+            projectId: "smile-bingo",
+            storageBucket: "smile-bingo.firebasestorage.app",
+            messagingSenderId: "829856257052",
+            appId: "1:829856257052:web:428a6e03c41cc801143bd9"
+        };
+
+        const appId = 'smile-bingo-prod';
+        // --- INITIALIZATION ---
+        async function initApp() {
+            const statusEl = document.getElementById('connection-status');
+            try {
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+
+                await signInAnonymously(auth); // 匿名ログイン
+
+                db = getFirestore(app);
+                authUser = auth.currentUser;
+                isOnlineMode = true;
+                statusEl.innerHTML = '<i class="fa-solid fa-cloud"></i> オンライン';
+                statusEl.classList.remove('hidden', 'bg-yellow-300/50');
+                statusEl.classList.add('bg-green-100', 'text-green-800');
+                onAuthStateChanged(auth, (user) => { if (user) { authUser = user; switchView('lobby'); } });
+            } catch (e) {
+                console.warn("Fallback to Local Mode");
+                db = new MockDB();
+                let uid = sessionStorage.getItem('mock_uid');
+                if (!uid) { uid = 'user_' + Math.random().toString(36).substr(2, 9); sessionStorage.setItem('mock_uid', uid); }
+                authUser = { uid: uid };
+                statusEl.innerHTML = '<i class="fa-solid fa-laptop"></i> ローカルモード';
+                statusEl.classList.remove('hidden', 'bg-yellow-300/50');
+                statusEl.classList.add('bg-gray-200', 'text-gray-700');
+                setTimeout(() => switchView('lobby'), 500);
+            }
+        }
+        initApp();
+
+        // --- GLOBAL VARS ---
+        let currentRoomId = null;
+        let isMaster = false;
+        let myCard = [];
+        let roomUnsubscribe, playersUnsubscribe;
+        let localDrawnNumbers = new Set();
+        let lastPlayedChanceId = null;
+        let mashCounter = 0;
+        let isFinished = false; // Flag for "Agari"
+
+        const MAX_NUMBER = 50;
+        const CHANCE_INTERVAL = 3;
+        const EMOTIONS = [{ id: 'laugh', label: '大爆笑' }, { id: 'cry', label: '泣き顔' }, { id: 'angry', label: '激怒' }, { id: 'serious', label: '真顔' }];
+
+        const views = { loading: document.getElementById('loading-view'), lobby: document.getElementById('lobby-view'), waiting: document.getElementById('waiting-view'), game: document.getElementById('game-view') };
+        function switchView(viewName) { Object.values(views).forEach(el => el.classList.add('hidden')); views[viewName].classList.remove('hidden'); }
+
+        // --- API WRAPPER ---
+        const api = {
+            doc: (path, ...s) => isOnlineMode ? doc(db, 'artifacts', appId, 'public', 'data', path, ...s) : db.doc('artifacts', appId, 'public', 'data', path, ...s),
+            collection: (path, ...s) => isOnlineMode ? collection(db, 'artifacts', appId, 'public', 'data', path, ...s) : db.collection('artifacts', appId, 'public', 'data', path, ...s),
+            setDoc: (ref, d) => isOnlineMode ? setDoc(ref, d) : db.setDoc(ref, d),
+            updateDoc: (ref, d) => isOnlineMode ? updateDoc(ref, d) : db.updateDoc(ref, d),
+            getDoc: (ref) => isOnlineMode ? getDoc(ref) : db.getDoc(ref),
+            getDocs: (ref) => {
+                // Simple mock for getDocs needed for Rigging
+                if (isOnlineMode) {
+                    // Need getDocs import for online mode if we use it, but we can rely on listeners for now
+                    // or implementing a simple fetch. For simplicity, we'll iterate listeners snapshot data if available.
+                    // But for Rigging we need fresh data. Let's skip Rigging on online mode without getDocs, 
+                    // or use the 'playersUnsubscribe' snapshot if we store it.
+                    // Actually, we can use onSnapshot's latest data if we store it globally.
+                    return new Promise(resolve => {
+                        onSnapshot(ref, (snap) => resolve(snap), (err) => resolve({ empty: true, forEach: () => { } }));
+                    });
+                } else {
+                    return new Promise(resolve => {
+                        db._triggerSingle(ref, (snap) => resolve(snap));
+                    });
+                }
+            },
+            onSnapshot: (ref, cb) => isOnlineMode ? onSnapshot(ref, cb) : db.onSnapshot(ref, cb),
+            arrayUnion: (el) => isOnlineMode ? arrayUnion(el) : { _methodName: 'arrayUnion', _elements: [el] },
+            increment: (n) => isOnlineMode ? increment(n) : { _methodName: 'increment', _operand: n },
+            serverTimestamp: () => new Date().toISOString()
+        };
+
+        // --- GAME FUNCTIONS ---
+
+        window.createGame = async () => {
+            const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
+            try {
+                await api.setDoc(api.doc('rooms', roomId), {
+                    hostId: authUser.uid, status: 'waiting', numbers: [], currentNumber: null, drawCount: 0, chanceActive: false, createdAt: api.serverTimestamp()
+                });
+                isMaster = true; currentRoomId = roomId;
+                document.getElementById('display-room-id').innerText = roomId;
+                setupRoomListeners(roomId); switchView('waiting');
+                document.getElementById('master-controls-waiting').classList.remove('hidden');
+                document.getElementById('master-game-controls').classList.remove('hidden');
+                document.getElementById('player-card-area').classList.add('hidden');
+            } catch (e) { console.error(e); alert("作成失敗"); }
+        };
+
+        window.joinGamePrompt = () => document.getElementById('join-form').classList.remove('hidden');
+        window.joinGame = async () => {
+            const username = document.getElementById('username-input').value.trim() || 'プレイヤー';
+            const roomId = document.getElementById('room-id-input').value.trim().toUpperCase();
+            if (!roomId) return alert("IDを入力");
+            try {
+                const roomSnap = await api.getDoc(api.doc('rooms', roomId));
+                if (!roomSnap.exists()) return alert("ルームが見つかりません");
+                myCard = generateBingoCard();
+                await api.setDoc(api.doc('rooms', roomId, 'players', authUser.uid), {
+                    name: username, card: myCard.flat(), joinedAt: api.serverTimestamp(), score: 0, bingo: false, finished: false
+                });
+                currentRoomId = roomId; isMaster = false; renderBingoCard(myCard); setupRoomListeners(roomId); switchView('waiting');
+                document.getElementById('player-msg-waiting').classList.remove('hidden');
+                document.getElementById('player-card-area').classList.remove('hidden');
+            } catch (e) { console.error(e); alert("参加失敗"); }
+        };
+
+        let cachedPlayers = []; // Store for master rigging logic
+
+        function setupRoomListeners(roomId) {
+            roomUnsubscribe = api.onSnapshot(api.doc('rooms', roomId), (doc) => {
+                if (!doc.exists()) return;
+                const data = doc.data();
+                handleRoomUpdate(data);
+                if (isMaster && data.chanceActive && data.chanceEndsAt && Date.now() > data.chanceEndsAt + 5000) endChanceTime();
+            });
+
+            playersUnsubscribe = api.onSnapshot(api.collection('rooms', roomId, 'players'), (snapshot) => {
+                const listEl = document.getElementById('waiting-player-list');
+                listEl.innerHTML = '';
+                let bingoCount = 0; let playerCount = 0;
+                cachedPlayers = []; // Update cache
+
+                snapshot.forEach(p => {
+                    const pData = p.data();
+                    cachedPlayers.push({ id: p.id, ...pData });
+                    playerCount++;
+                    const li = document.createElement('li');
+                    li.className = "bg-white p-2 rounded shadow-sm flex justify-between px-4 items-center";
+                    let statusHtml = '';
+                    if (pData.finished) statusHtml = '<span class="bg-gray-500 text-white text-xs px-2 py-1 rounded-full">上がり</span>';
+                    else if (pData.bingo) statusHtml = '<span class="bg-yellow-400 text-white text-xs px-2 py-1 rounded-full animate-pulse">BINGO!</span>';
+
+                    li.innerHTML = `<span class="font-bold">${pData.name}</span>${statusHtml}`;
+                    listEl.appendChild(li);
+                    if (pData.bingo || pData.finished) bingoCount++;
+                });
+                document.getElementById('player-count').innerText = `${playerCount}人`;
+                document.getElementById('master-status-count').innerText = bingoCount;
+            });
+        }
+
+        function handleRoomUpdate(data) {
+            if (data.status === 'active' && !views.game.classList.contains('hidden') === false) switchView('game');
+            if (data.currentNumber && !localDrawnNumbers.has(data.currentNumber)) {
+                localDrawnNumbers.add(data.currentNumber);
+                document.getElementById('current-number-display').innerText = data.currentNumber;
+                const badge = document.createElement('span');
+                badge.className = "inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded m-0.5";
+                badge.innerText = data.currentNumber;
+                document.getElementById('drawn-history').prepend(badge);
+                if (!isMaster && !isFinished) markNumber(data.currentNumber);
+            }
+            document.getElementById('remaining-count').innerText = MAX_NUMBER - (data.numbers ? data.numbers.length : 0);
+            document.getElementById('chance-progress-bar').style.width = `${((data.drawCount || 0) % CHANCE_INTERVAL) / CHANCE_INTERVAL * 100}%`;
+
+            if (data.chanceActive) {
+                if (isMaster) {
+                    document.getElementById('master-chance-status').classList.remove('hidden');
+                } else if (!isFinished) { // Don't show chance to finished players
+                    if (data.chanceId !== lastPlayedChanceId) {
+                        lastPlayedChanceId = data.chanceId;
+                        showChanceSelection(data.chanceTarget);
+                    }
+                    document.getElementById('chance-indicator').classList.remove('hidden');
+                    document.getElementById('chance-emotion-display').innerText = `お題: ${data.chanceTarget}`;
+                }
+            } else {
+                document.getElementById('camera-modal').classList.add('hidden');
+                document.getElementById('chance-indicator').classList.add('hidden');
+                document.getElementById('master-chance-status').classList.add('hidden');
+            }
+
+            if (data.showChanceResult) {
+                if (document.getElementById('chance-result-modal').classList.contains('hidden')) {
+                    document.getElementById('chance-winner-name').innerText = data.chanceWinnerName || "なし";
+                    document.getElementById('chance-winner-score').innerText = data.chanceWinnerScore || 0;
+                    document.getElementById('chance-result-modal').classList.remove('hidden');
+                }
+            } else {
+                document.getElementById('chance-result-modal').classList.add('hidden');
+            }
+        }
+
+        // --- MASTER LOGIC ---
+        window.startGame = async () => isMaster && await api.updateDoc(api.doc('rooms', currentRoomId), { status: 'active' });
+
+        window.drawNumber = async () => {
+            if (!isMaster) return;
+            const roomSnap = await api.getDoc(api.doc('rooms', currentRoomId));
+            const data = roomSnap.data();
+            if (data.chanceActive) return alert("チャンスタイム中です！");
+
+            let availableNumbers = [];
+            for (let i = 1; i <= MAX_NUMBER; i++) {
+                if (!data.numbers || !data.numbers.includes(i)) availableNumbers.push(i);
+            }
+            if (availableNumbers.length === 0) return alert("終了");
+
+            let nextNum;
+            // --- RIGGING LOGIC ---
+            if (data.nextRiggedPlayerId) {
+                console.log("Attempting Rig for: " + data.nextRiggedPlayerId);
+                const targetPlayer = cachedPlayers.find(p => p.id === data.nextRiggedPlayerId);
+                if (targetPlayer && !targetPlayer.finished) {
+                    const pCard = targetPlayer.card;
+                    const pDrawn = new Set(data.numbers || []);
+                    pDrawn.add(0); // Free
+
+                    // Priority 1: Bingo Maker (4 punched)
+                    const bingoCandidates = getTargetNumbers(pCard, pDrawn, availableNumbers, 4);
+                    // Priority 2: Reach Maker (3 punched)
+                    const reachCandidates = getTargetNumbers(pCard, pDrawn, availableNumbers, 3);
+                    // Priority 3: Progress Maker (2 punched)
+                    const progressCandidates = getTargetNumbers(pCard, pDrawn, availableNumbers, 2);
+
+                    if (bingoCandidates.length > 0) nextNum = bingoCandidates[Math.floor(Math.random() * bingoCandidates.length)];
+                    else if (reachCandidates.length > 0) nextNum = reachCandidates[Math.floor(Math.random() * reachCandidates.length)];
+                    else if (progressCandidates.length > 0) nextNum = progressCandidates[Math.floor(Math.random() * progressCandidates.length)];
+
+                    console.log("Rigged Number: ", nextNum);
+                }
+                await api.updateDoc(api.doc('rooms', currentRoomId), { nextRiggedPlayerId: null });
+            }
+
+            if (!nextNum) nextNum = availableNumbers[Math.floor(Math.random() * availableNumbers.length)];
+
+            await api.updateDoc(api.doc('rooms', currentRoomId), {
+                numbers: api.arrayUnion(nextNum), currentNumber: nextNum, drawCount: api.increment(1), showChanceResult: false
+            });
+            const newCount = (data.drawCount || 0) + 1;
+            if (newCount > 0 && newCount % CHANCE_INTERVAL === 0) setTimeout(() => triggerChanceTime(), 3000);
+        };
+
+        function getTargetNumbers(cardFlat, drawnSet, availableArr, punchedCountTarget) {
+            const grid = []; for (let i = 0; i < 5; i++) grid.push(cardFlat.slice(i * 5, i * 5 + 5));
+            const lines = [...grid]; // Rows
+            for (let c = 0; c < 5; c++) lines.push([0, 1, 2, 3, 4].map(r => grid[r][c])); // Cols
+            lines.push([0, 1, 2, 3, 4].map(i => grid[i][i])); // Diag1
+            lines.push([0, 1, 2, 3, 4].map(i => grid[i][4 - i])); // Diag2
+
+            const candidates = new Set();
+            lines.forEach(line => {
+                const count = line.filter(n => drawnSet.has(n)).length;
+                if (count === punchedCountTarget) {
+                    line.filter(n => !drawnSet.has(n) && availableArr.includes(n)).forEach(n => candidates.add(n));
+                }
+            });
+            return Array.from(candidates);
+        }
+
+        window.triggerChanceTime = async () => {
+            if (!isMaster) return;
+            const emotion = EMOTIONS[Math.floor(Math.random() * EMOTIONS.length)];
+            const chanceId = Date.now().toString();
+            await api.updateDoc(api.doc('rooms', currentRoomId), {
+                chanceActive: true, chanceTarget: emotion.label, chanceId: chanceId, chanceEndsAt: Date.now() + 10000
+            });
+            setTimeout(() => endChanceTime(), 12000); // 12s total (selection + action)
+        };
+        window.forceEndChance = () => endChanceTime();
+
+        async function endChanceTime() {
+            if (!isMaster) return;
+
+            // Find Winner
+            let winnerName = "なし";
+            let winnerScore = 0;
+            let winnerId = null;
+
+            const roomRef = api.doc('rooms', currentRoomId);
+            const roomSnap = await api.getDoc(roomRef);
+            const currentChanceId = roomSnap.data().chanceId;
+
+            // Using cached players for logic
+            cachedPlayers.forEach(p => {
+                if (p.lastChanceId === currentChanceId && p.lastChanceScore > winnerScore) {
+                    winnerScore = p.lastChanceScore;
+                    winnerName = p.name;
+                    winnerId = p.id;
+                }
+            });
+
+            await api.updateDoc(api.doc('rooms', currentRoomId), {
+                chanceActive: false,
+                showChanceResult: true,
+                chanceWinnerName: winnerName,
+                chanceWinnerScore: winnerScore,
+                nextRiggedPlayerId: winnerId // Set up rigging for next draw
+            });
+        }
+        window.closeChanceResult = async () => isMaster ? await api.updateDoc(api.doc('rooms', currentRoomId), { showChanceResult: false }) : document.getElementById('chance-result-modal').classList.add('hidden');
+
+        // --- CLIENT CHANCE UI ---
+        let videoStream;
+        function showChanceSelection(target) {
+            document.getElementById('camera-select-phase').classList.remove('hidden');
+            document.getElementById('camera-active-phase').classList.add('hidden');
+            document.getElementById('manual-active-phase').classList.add('hidden');
+            document.getElementById('camera-status').classList.add('hidden');
+            document.getElementById('camera-emotion-target').innerText = target;
+            document.getElementById('camera-modal').classList.remove('hidden');
+            document.getElementById('camera-modal').classList.add('flex');
+        }
+
+        window.startCameraMode = async () => {
+            document.getElementById('camera-select-phase').classList.add('hidden');
+            document.getElementById('camera-active-phase').classList.remove('hidden');
+            const video = document.getElementById('camera-feed');
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+                video.srcObject = videoStream;
+                startCountdown(true);
+            } catch (e) {
+                alert("カメラが起動できません。手動モードに切り替えます。");
+                window.startManualMode();
+            }
+        };
+
+        window.startManualMode = () => {
+            document.getElementById('camera-select-phase').classList.add('hidden');
+            document.getElementById('manual-active-phase').classList.remove('hidden');
+            mashCounter = 0;
+            document.getElementById('mash-count').innerText = 0;
+            startCountdown(false);
+        };
+
+        window.mashButton = () => {
+            mashCounter++;
+            document.getElementById('mash-count').innerText = mashCounter;
+            // Visual feedback
+            const btn = document.getElementById('mash-btn');
+            btn.style.transform = "scale(0.95)";
+            setTimeout(() => btn.style.transform = "scale(1)", 50);
+        };
+
+        function startCountdown(isCamera) {
+            const overlay = document.getElementById('countdown-overlay');
+            let count = 5;
+            if (isCamera) overlay.innerText = count;
+
+            const timer = setInterval(() => {
+                count--;
+                if (isCamera) overlay.innerText = count;
+                if (count <= 0) {
+                    clearInterval(timer);
+                    if (isCamera) {
+                        document.getElementById('camera-flash').style.opacity = 1;
+                        setTimeout(() => document.getElementById('camera-flash').style.opacity = 0, 200);
+                    }
+                    submitScore(isCamera);
+                }
+            }, 1000);
+        }
+
+        async function submitScore(isCamera) {
+            document.getElementById('camera-status').classList.remove('hidden');
+            document.getElementById('camera-status').innerText = "採点中...";
+            if (videoStream) videoStream.getTracks().forEach(track => track.stop());
+
+            let score = 0;
+            if (isCamera) {
+                // High score range: 60-100
+                score = Math.floor(Math.random() * 41) + 60;
+            } else {
+                // Low/Med score range based on taps: max 80
+                score = Math.min(80, Math.floor(mashCounter * 3) + Math.floor(Math.random() * 20));
+            }
+
+            document.getElementById('camera-status').innerText = `${score}点 送信完了!`;
+
+            const roomSnap = await api.getDoc(api.doc('rooms', currentRoomId));
+            const chanceId = roomSnap.data().chanceId;
+
+            await api.updateDoc(api.doc('rooms', currentRoomId, 'players', authUser.uid), {
+                lastChanceId: chanceId, lastChanceScore: score
+            });
+
+            setTimeout(() => {
+                document.getElementById('camera-modal').classList.add('hidden');
+                document.getElementById('camera-modal').classList.remove('flex');
+            }, 1500);
+        }
+
+        // --- BINGO LOGIC ---
+        function generateBingoCard() {
+            const card = [[], [], [], [], []];
+            for (let col = 0; col < 5; col++) {
+                const min = col * 10 + 1; const max = (col + 1) * 10;
+                while (card[col].length < 5) {
+                    const n = Math.floor(Math.random() * (max - min + 1)) + min;
+                    if (!card[col].includes(n)) card[col].push(n);
+                }
+            }
+            const rows = [];
+            for (let r = 0; r < 5; r++) {
+                const row = [];
+                for (let c = 0; c < 5; c++) {
+                    if (r === 2 && c === 2) row.push(0); else row.push(card[c][r]);
+                }
+                rows.push(row);
+            }
+            return rows;
+        }
+
+        function renderBingoCard(cardData) {
+            const grid = document.getElementById('bingo-grid');
+            grid.innerHTML = '';
+            cardData.forEach(row => {
+                row.forEach(num => {
+                    const cell = document.createElement('div');
+                    cell.className = "bingo-cell bg-white rounded-lg text-xl font-bold text-slate-700 shadow-sm relative cursor-pointer select-none";
+                    if (num === 0) {
+                        cell.classList.add('punched');
+                        cell.innerHTML = '<i class="fa-solid fa-star text-yellow-500"></i>';
+                    } else {
+                        cell.innerText = num;
+                        cell.id = `cell-${num}`;
+                        if (localDrawnNumbers.has(num)) cell.classList.add('punched');
+                    }
+                    grid.appendChild(cell);
+                });
+            });
+        }
+
+        function markNumber(num) {
+            const cell = document.getElementById(`cell-${num}`);
+            if (cell) {
+                cell.classList.add('punched');
+                checkBingoInternal();
+            }
+        }
+
+        async function checkBingoInternal() {
+            let bingoLines = 0;
+            const grid = myCard;
+            const isPunched = (n) => n === 0 || localDrawnNumbers.has(n);
+            const bingoCells = [];
+
+            // Rows, Cols, Diags
+            const checkLine = (line) => {
+                if (line.every(isPunched)) {
+                    bingoLines++;
+                    line.forEach(n => bingoCells.push(n));
+                }
+            };
+
+            for (let r = 0; r < 5; r++) checkLine(grid[r]);
+            for (let c = 0; c < 5; c++) checkLine([0, 1, 2, 3, 4].map(r => grid[r][c]));
+            checkLine([0, 1, 2, 3, 4].map(i => grid[i][i]));
+            checkLine([0, 1, 2, 3, 4].map(i => grid[i][4 - i]));
+
+            if (bingoCells.length > 0) {
+                bingoCells.forEach(num => {
+                    const cell = document.getElementById(`cell-${num}`);
+                    if (cell) { cell.classList.remove('punched'); cell.classList.add('bingo-win'); }
+                });
+            }
+
+            if (bingoLines > 0) {
+                // If newly bingo or bingo count increased
+                // Check if already declared bingo to prevent spamming
+                const pRef = api.doc('rooms', currentRoomId, 'players', authUser.uid);
+                const pSnap = await api.getDoc(pRef);
+                const currentBingo = pSnap.data().bingo;
+
+                if (!currentBingo) {
+                    await api.updateDoc(pRef, { bingo: true });
+                    document.getElementById('bingo-modal').classList.remove('hidden');
+                }
+            }
+        }
+
+        window.continueGame = () => document.getElementById('bingo-modal').classList.add('hidden');
+        window.finishGame = async () => {
+            isFinished = true;
+            document.getElementById('bingo-modal').classList.add('hidden');
+            document.getElementById('bingo-grid').classList.add('opacity-50', 'pointer-events-none');
+            document.getElementById('finish-message').classList.remove('hidden');
+            await api.updateDoc(api.doc('rooms', currentRoomId, 'players', authUser.uid), { finished: true });
+        };
+    </script>
+</body>
+
+</html>
