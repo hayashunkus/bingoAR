@@ -749,8 +749,8 @@
             const emotion = EMOTIONS[Math.floor(Math.random() * EMOTIONS.length)];
             const chanceId = Date.now().toString();
 
-            // 制限時間を30秒に延長（カメラ許可などの時間を考慮）
-            const DURATION = 30000;
+            // 制限時間を20秒に延長（カメラ許可などの時間を考慮）
+            const DURATION = 20000;
 
             await api.updateDoc(api.doc('rooms', currentRoomId), {
                 chanceActive: true,
