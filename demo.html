@@ -67,23 +67,13 @@
     <div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden relative">
 
         <!-- Header -->
-        <header class="bg-yellow-400 p-4 shadow-md z-10 relative flex items-center justify-center min-h-[80px]">
-
-            <div class="text-center w-full">
-                <h1 class="text-2xl font-extrabold text-white drop-shadow-md tracking-wider"><i
-                        class="fa-solid fa-face-laugh-squint mr-2"></i>スマイルビンゴ</h1>
-                <div id="connection-status"
-                    class="text-xs text-yellow-800 font-bold mt-1 bg-yellow-300/50 inline-block px-2 py-0.5 rounded-full hidden">
-                    <i class="fa-solid fa-wifi"></i> 接続中
-                </div>
+        <header class="bg-yellow-400 p-4 text-center shadow-md z-10 relative">
+            <h1 class="text-2xl font-extrabold text-white drop-shadow-md tracking-wider"><i
+                    class="fa-solid fa-face-laugh-squint mr-2"></i>スマイルビンゴ</h1>
+            <div id="connection-status"
+                class="text-xs text-yellow-800 font-bold mt-1 bg-yellow-300/50 inline-block px-2 py-0.5 rounded-full hidden">
+                <i class="fa-solid fa-wifi"></i> 接続中
             </div>
-
-            <!-- Quit Button (Hidden on Lobby) -->
-            <button id="quit-btn" onclick="quitGame()"
-                class="hidden absolute right-4 w-8 h-8 flex items-center justify-center bg-red-500/20 hover:bg-red-500 text-white rounded-full transition"
-                title="終了してトップへ">
-                <i class="fa-solid fa-right-from-bracket"></i>
-            </button>
         </header>
 
         <!-- Main Content Area -->
@@ -169,15 +159,14 @@
             <div id="game-view" class="hidden flex flex-col h-full">
                 <!-- Status Bar -->
                 <div
-                    class="bg-white rounded-xl shadow-lg p-6 mb-4 text-center border-4 border-yellow-100 relative overflow-hidden">
+                    class="bg-white rounded-xl shadow-lg p-4 mb-4 text-center border-4 border-yellow-100 relative overflow-hidden">
                     <div class="absolute top-0 left-0 w-full h-2 bg-gray-200">
                         <div id="chance-progress-bar" class="h-full bg-pink-500 transition-all duration-500"
                             style="width: 0%"></div>
                     </div>
-                    <p class="text-sm text-gray-500 mt-1 font-bold">現在の数字</p>
-                    <!-- Responsive Text Size -->
+                    <p class="text-xs text-gray-400 mt-2">現在の数字</p>
                     <div id="current-number-display"
-                        class="text-7xl sm:text-8xl md:text-9xl font-black text-slate-800 py-6 min-h-[160px] flex items-center justify-center leading-none tracking-tight">
+                        class="text-6xl font-black text-slate-800 h-20 flex items-center justify-center">
                         --
                     </div>
                     <!-- Master view status -->
@@ -510,17 +499,7 @@
         ];
 
         const views = { loading: document.getElementById('loading-view'), lobby: document.getElementById('lobby-view'), waiting: document.getElementById('waiting-view'), game: document.getElementById('game-view') };
-        function switchView(viewName) {
-            Object.values(views).forEach(el => el.classList.add('hidden'));
-            views[viewName].classList.remove('hidden');
-
-            // Toggle quit button visibility
-            if (viewName === 'waiting' || viewName === 'game') {
-                document.getElementById('quit-btn').classList.remove('hidden');
-            } else {
-                document.getElementById('quit-btn').classList.add('hidden');
-            }
-        }
+        function switchView(viewName) { Object.values(views).forEach(el => el.classList.add('hidden')); views[viewName].classList.remove('hidden'); }
 
         // --- API WRAPPER ---
         const api = {
@@ -579,13 +558,6 @@
                 document.getElementById('player-msg-waiting').classList.remove('hidden');
                 document.getElementById('player-card-area').classList.remove('hidden');
             } catch (e) { console.error(e); alert("参加失敗"); }
-        };
-
-        // --- QUIT GAME FUNCTION (Modified to Reload) ---
-        window.quitGame = () => {
-            if (confirm('ゲームを終了してトップ画面に戻りますか？')) {
-                window.location.reload(); // Simple and robust reset
-            }
         };
 
         let cachedPlayers = []; // Store for master rigging logic
@@ -841,6 +813,7 @@
         window.mashButton = () => {
             mashCounter++;
             document.getElementById('mash-count').innerText = mashCounter;
+            // Visual feedback
             const btn = document.getElementById('mash-btn');
             btn.style.transform = "scale(0.95)";
             setTimeout(() => btn.style.transform = "scale(1)", 50);
@@ -873,17 +846,18 @@
             let score = 0;
 
             if (isCamera) {
+                // CAPTURE PHOTO
                 const video = document.getElementById('camera-feed');
                 const canvas = document.getElementById('camera-canvas');
 
-                // 1. Capture Photo
+                // Resize to small thumbnail (e.g. 300x400) to keep Firestore happy (<1MB)
                 canvas.width = 300;
                 canvas.height = 300 * (video.videoHeight / video.videoWidth);
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                photoData = canvas.toDataURL('image/jpeg', 0.5);
+                photoData = canvas.toDataURL('image/jpeg', 0.5); // Compress quality 50%
 
-                // 2. AI Analysis
+                // AI ANALYSIS
                 let detectionScore = 0;
                 try {
                     // Use TinyFaceDetector for speed on mobile
@@ -896,11 +870,7 @@
 
                         // Score calculation: probability (0-1) * 100 + bonus
                         // e.g. 90% smile -> 90 + 10 = 100
-                        // detectionScore = Math.floor(probability * 100);
-
-                        // New (More generous)
-                        // Boost logic: 1.5x multiplier. If probability > 0.6, it becomes max.
-                        detectionScore = Math.min(100, Math.floor(probability * 150));
+                        detectionScore = Math.floor(probability * 100);
 
                         console.log(`Emotion: ${targetKey}, Prob: ${probability}, Score: ${detectionScore}`);
                     } else {
@@ -915,13 +885,10 @@
 
                 // Base score logic: AI score (0-100) + Participation Bonus (20)
                 // Cap at 100, min 30 (for just showing face)
-                // score = Math.min(100, Math.max(30, detectionScore + 20));
-
-                // New
-                // Base 40 points for just detecting a face successfully
-                score = Math.min(100, Math.max(40, detectionScore + 30));
+                score = Math.min(100, Math.max(30, detectionScore + 20));
 
             } else {
+                // Low/Med score range based on taps: max 80
                 score = Math.min(80, Math.floor(mashCounter * 3) + Math.floor(Math.random() * 20));
             }
 
@@ -997,6 +964,7 @@
             const isPunched = (n) => n === 0 || localDrawnNumbers.has(n);
             const bingoCells = [];
 
+            // Rows, Cols, Diags
             const checkLine = (line) => {
                 if (line.every(isPunched)) {
                     bingoLines++;
@@ -1017,6 +985,8 @@
             }
 
             if (bingoLines > 0) {
+                // If newly bingo or bingo count increased
+                // Check if already declared bingo to prevent spamming
                 const pRef = api.doc('rooms', currentRoomId, 'players', authUser.uid);
                 const pSnap = await api.getDoc(pRef);
                 const currentBingo = pSnap.data().bingo;

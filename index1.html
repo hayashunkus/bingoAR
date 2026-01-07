@@ -7,8 +7,6 @@
     <title>スマイルビンゴ - Smile Bingo</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
-    <!-- face-api.js (AI表情検知ライブラリ) -->
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap');
 
@@ -24,6 +22,7 @@
             transition: all 0.3s;
         }
 
+        /* 穴が開いたマスのスタイル（青色） */
         .punched {
             background-color: #3b82f6 !important;
             color: white !important;
@@ -31,6 +30,7 @@
             box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
+        /* ビンゴ成立時のスタイル（赤色で強調） */
         .bingo-win {
             background-color: #ef4444 !important;
             color: white !important;
@@ -67,23 +67,13 @@
     <div id="app" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl overflow-hidden relative">
 
         <!-- Header -->
-        <header class="bg-yellow-400 p-4 shadow-md z-10 relative flex items-center justify-center min-h-[80px]">
-
-            <div class="text-center w-full">
-                <h1 class="text-2xl font-extrabold text-white drop-shadow-md tracking-wider"><i
-                        class="fa-solid fa-face-laugh-squint mr-2"></i>スマイルビンゴ</h1>
-                <div id="connection-status"
-                    class="text-xs text-yellow-800 font-bold mt-1 bg-yellow-300/50 inline-block px-2 py-0.5 rounded-full hidden">
-                    <i class="fa-solid fa-wifi"></i> 接続中
-                </div>
+        <header class="bg-yellow-400 p-4 text-center shadow-md z-10 relative">
+            <h1 class="text-2xl font-extrabold text-white drop-shadow-md tracking-wider"><i
+                    class="fa-solid fa-face-laugh-squint mr-2"></i>スマイルビンゴ</h1>
+            <div id="connection-status"
+                class="text-xs text-yellow-800 font-bold mt-1 bg-yellow-300/50 inline-block px-2 py-0.5 rounded-full hidden">
+                <i class="fa-solid fa-wifi"></i> 接続中
             </div>
-
-            <!-- Quit Button (Hidden on Lobby) -->
-            <button id="quit-btn" onclick="quitGame()"
-                class="hidden absolute right-4 w-8 h-8 flex items-center justify-center bg-red-500/20 hover:bg-red-500 text-white rounded-full transition"
-                title="終了してトップへ">
-                <i class="fa-solid fa-right-from-bracket"></i>
-            </button>
         </header>
 
         <!-- Main Content Area -->
@@ -91,7 +81,7 @@
             <!-- Loading State -->
             <div id="loading-view" class="flex flex-col items-center justify-center h-full space-y-4">
                 <div class="animate-spin text-4xl text-yellow-500"><i class="fa-solid fa-circle-notch"></i></div>
-                <p id="loading-text">システム起動中...</p>
+                <p>システム起動中...</p>
             </div>
 
             <!-- Lobby View -->
@@ -169,15 +159,14 @@
             <div id="game-view" class="hidden flex flex-col h-full">
                 <!-- Status Bar -->
                 <div
-                    class="bg-white rounded-xl shadow-lg p-6 mb-4 text-center border-4 border-yellow-100 relative overflow-hidden">
+                    class="bg-white rounded-xl shadow-lg p-4 mb-4 text-center border-4 border-yellow-100 relative overflow-hidden">
                     <div class="absolute top-0 left-0 w-full h-2 bg-gray-200">
                         <div id="chance-progress-bar" class="h-full bg-pink-500 transition-all duration-500"
                             style="width: 0%"></div>
                     </div>
-                    <p class="text-sm text-gray-500 mt-1 font-bold">現在の数字</p>
-                    <!-- Responsive Text Size -->
+                    <p class="text-xs text-gray-400 mt-2">現在の数字</p>
                     <div id="current-number-display"
-                        class="text-7xl sm:text-8xl md:text-9xl font-black text-slate-800 py-6 min-h-[160px] flex items-center justify-center leading-none tracking-tight">
+                        class="text-6xl font-black text-slate-800 h-20 flex items-center justify-center">
                         --
                     </div>
                     <!-- Master view status -->
@@ -251,12 +240,12 @@
 
                     <button onclick="startCameraMode()"
                         class="w-full bg-pink-500 text-white font-bold py-4 rounded-xl mb-3 shadow-lg flex items-center justify-center">
-                        <i class="fa-solid fa-camera text-2xl mr-2"></i> AI表情採点で挑戦<br><span
-                            class="text-xs font-normal ml-2">(AIが顔を分析します)</span>
+                        <i class="fa-solid fa-camera text-2xl mr-2"></i> カメラで挑戦<br><span
+                            class="text-xs font-normal ml-2">(高得点のチャンス！)</span>
                     </button>
                     <button onclick="startManualMode()"
                         class="w-full bg-gray-700 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center">
-                        <i class="fa-solid fa-hand-pointer text-xl mr-2"></i> 手動で挑戦<br><span
+                        <i class="fa-solid fa-hand-pointer text-xl mr-2"></i> カメラなしで挑戦<br><span
                             class="text-xs font-normal ml-2">(タップ連打)</span>
                     </button>
                 </div>
@@ -265,9 +254,6 @@
                 <div id="camera-active-phase"
                     class="hidden relative w-full max-w-sm aspect-[3/4] bg-gray-900 rounded-xl overflow-hidden border-4 border-white shadow-2xl">
                     <video id="camera-feed" class="w-full h-full object-cover" autoplay playsinline muted></video>
-                    <!-- Hidden canvas for capturing photo -->
-                    <canvas id="camera-canvas" class="hidden"></canvas>
-
                     <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div id="countdown-overlay" class="text-9xl font-bold text-white drop-shadow-lg opacity-80">5
                         </div>
@@ -288,7 +274,7 @@
                 </div>
 
                 <div id="camera-status" class="text-white mt-4 font-bold text-lg animate-pulse hidden">
-                    AI分析中...
+                    採点中...
                 </div>
             </div>
 
@@ -296,16 +282,10 @@
             <div id="chance-result-modal"
                 class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                 <div
-                    class="bg-white w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl transform scale-100 transition-transform relative">
+                    class="bg-white w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl transform scale-100 transition-transform">
                     <h3 class="text-xl font-bold text-pink-500 mb-2">チャンスタイム結果!</h3>
                     <div class="py-4">
                         <p class="text-sm text-gray-500">今回の勝者</p>
-
-                        <div id="winner-photo-container"
-                            class="w-32 h-32 mx-auto my-2 rounded-full overflow-hidden border-4 border-yellow-400 bg-gray-200 relative hidden">
-                            <img id="winner-photo" src="" class="w-full h-full object-cover" alt="勝者の写真">
-                        </div>
-
                         <p id="chance-winner-name" class="text-3xl font-black text-slate-800 my-2">???</p>
                         <p class="text-4xl text-yellow-500 font-bold mb-2"><span id="chance-winner-score">0</span>点</p>
                         <p class="text-xs text-gray-400">この人に有利な数字が出やすくなります！</p>
@@ -416,12 +396,9 @@
             }
         }
 
-        // --- APP STATE & INIT ---
-        let db;
-        let authUser;
-        let isOnlineMode = false;
-        let aiModelsLoaded = false;
-
+        // --- APP STATE ---
+        let db, authUser, isOnlineMode = false;
+        // ユーザー提供のFirebase設定
         const firebaseConfig = {
             apiKey: "AIzaSyADIGqB8WzFuUSLBelYbUVJArPXCpC2hHk",
             authDomain: "smile-bingo.firebaseapp.com",
@@ -432,15 +409,10 @@
         };
 
         const appId = 'smile-bingo-prod';
-
+        // --- INITIALIZATION ---
         async function initApp() {
             const statusEl = document.getElementById('connection-status');
-
-            // Start Loading AI Models concurrently
-            loadAiModels();
-
             try {
-                // Firebaseを初期化（直接設定オブジェクトを渡す）
                 const app = initializeApp(firebaseConfig);
                 const auth = getAuth(app);
 
@@ -449,21 +421,12 @@
                 db = getFirestore(app);
                 authUser = auth.currentUser;
                 isOnlineMode = true;
-
                 statusEl.innerHTML = '<i class="fa-solid fa-cloud"></i> オンライン';
                 statusEl.classList.remove('hidden', 'bg-yellow-300/50');
                 statusEl.classList.add('bg-green-100', 'text-green-800');
-
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        authUser = user;
-                        // Wait for AI if not ready? No, let them enter lobby
-                        switchView('lobby');
-                    }
-                });
-
+                onAuthStateChanged(auth, (user) => { if (user) { authUser = user; switchView('lobby'); } });
             } catch (e) {
-                console.warn("Fallback to Local Mode:", e);
+                console.warn("Fallback to Local Mode");
                 db = new MockDB();
                 let uid = sessionStorage.getItem('mock_uid');
                 if (!uid) { uid = 'user_' + Math.random().toString(36).substr(2, 9); sessionStorage.setItem('mock_uid', uid); }
@@ -474,19 +437,6 @@
                 setTimeout(() => switchView('lobby'), 500);
             }
         }
-
-        async function loadAiModels() {
-            try {
-                const modelUrl = 'https://justadudewhohacks.github.io/face-api.js/models';
-                await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
-                await faceapi.nets.faceExpressionNet.loadFromUri(modelUrl);
-                aiModelsLoaded = true;
-                console.log("AI Models Loaded");
-            } catch (e) {
-                console.error("Failed to load AI models", e);
-            }
-        }
-
         initApp();
 
         // --- GLOBAL VARS ---
@@ -498,29 +448,13 @@
         let lastPlayedChanceId = null;
         let mashCounter = 0;
         let isFinished = false; // Flag for "Agari"
-        let currentEmotionTargetKey = '';
 
         const MAX_NUMBER = 50;
         const CHANCE_INTERVAL = 3;
-        const EMOTIONS = [
-            { id: 'laugh', label: '大爆笑', key: 'happy' },
-            { id: 'cry', label: '泣き顔', key: 'sad' },
-            { id: 'angry', label: '激怒', key: 'angry' },
-            { id: 'serious', label: '真顔', key: 'neutral' }
-        ];
+        const EMOTIONS = [{ id: 'laugh', label: '大爆笑' }, { id: 'cry', label: '泣き顔' }, { id: 'angry', label: '激怒' }, { id: 'serious', label: '真顔' }];
 
         const views = { loading: document.getElementById('loading-view'), lobby: document.getElementById('lobby-view'), waiting: document.getElementById('waiting-view'), game: document.getElementById('game-view') };
-        function switchView(viewName) {
-            Object.values(views).forEach(el => el.classList.add('hidden'));
-            views[viewName].classList.remove('hidden');
-
-            // Toggle quit button visibility
-            if (viewName === 'waiting' || viewName === 'game') {
-                document.getElementById('quit-btn').classList.remove('hidden');
-            } else {
-                document.getElementById('quit-btn').classList.add('hidden');
-            }
-        }
+        function switchView(viewName) { Object.values(views).forEach(el => el.classList.add('hidden')); views[viewName].classList.remove('hidden'); }
 
         // --- API WRAPPER ---
         const api = {
@@ -530,7 +464,13 @@
             updateDoc: (ref, d) => isOnlineMode ? updateDoc(ref, d) : db.updateDoc(ref, d),
             getDoc: (ref) => isOnlineMode ? getDoc(ref) : db.getDoc(ref),
             getDocs: (ref) => {
+                // Simple mock for getDocs needed for Rigging
                 if (isOnlineMode) {
+                    // Need getDocs import for online mode if we use it, but we can rely on listeners for now
+                    // or implementing a simple fetch. For simplicity, we'll iterate listeners snapshot data if available.
+                    // But for Rigging we need fresh data. Let's skip Rigging on online mode without getDocs, 
+                    // or use the 'playersUnsubscribe' snapshot if we store it.
+                    // Actually, we can use onSnapshot's latest data if we store it globally.
                     return new Promise(resolve => {
                         onSnapshot(ref, (snap) => resolve(snap), (err) => resolve({ empty: true, forEach: () => { } }));
                     });
@@ -579,13 +519,6 @@
                 document.getElementById('player-msg-waiting').classList.remove('hidden');
                 document.getElementById('player-card-area').classList.remove('hidden');
             } catch (e) { console.error(e); alert("参加失敗"); }
-        };
-
-        // --- QUIT GAME FUNCTION (Modified to Reload) ---
-        window.quitGame = () => {
-            if (confirm('ゲームを終了してトップ画面に戻りますか？')) {
-                window.location.reload(); // Simple and robust reset
-            }
         };
 
         let cachedPlayers = []; // Store for master rigging logic
@@ -638,7 +571,6 @@
             document.getElementById('chance-progress-bar').style.width = `${((data.drawCount || 0) % CHANCE_INTERVAL) / CHANCE_INTERVAL * 100}%`;
 
             if (data.chanceActive) {
-                currentEmotionTargetKey = data.chanceTargetKey; // Store target key for AI
                 if (isMaster) {
                     document.getElementById('master-chance-status').classList.remove('hidden');
                 } else if (!isFinished) { // Don't show chance to finished players
@@ -659,17 +591,6 @@
                 if (document.getElementById('chance-result-modal').classList.contains('hidden')) {
                     document.getElementById('chance-winner-name').innerText = data.chanceWinnerName || "なし";
                     document.getElementById('chance-winner-score').innerText = data.chanceWinnerScore || 0;
-
-                    const photoContainer = document.getElementById('winner-photo-container');
-                    const photoImg = document.getElementById('winner-photo');
-
-                    if (data.chanceWinnerPhoto) {
-                        photoImg.src = data.chanceWinnerPhoto;
-                        photoContainer.classList.remove('hidden');
-                    } else {
-                        photoContainer.classList.add('hidden');
-                    }
-
                     document.getElementById('chance-result-modal').classList.remove('hidden');
                 }
             } else {
@@ -748,18 +669,10 @@
             if (!isMaster) return;
             const emotion = EMOTIONS[Math.floor(Math.random() * EMOTIONS.length)];
             const chanceId = Date.now().toString();
-
-            // 制限時間を30秒に延長（カメラ許可などの時間を考慮）
-            const DURATION = 30000;
-
             await api.updateDoc(api.doc('rooms', currentRoomId), {
-                chanceActive: true,
-                chanceTarget: emotion.label,
-                chanceTargetKey: emotion.key,
-                chanceId: chanceId,
-                chanceEndsAt: Date.now() + DURATION
+                chanceActive: true, chanceTarget: emotion.label, chanceId: chanceId, chanceEndsAt: Date.now() + 10000
             });
-            setTimeout(() => endChanceTime(), DURATION + 2000); // 32秒後に終了
+            setTimeout(() => endChanceTime(), 12000); // 12s total (selection + action)
         };
         window.forceEndChance = () => endChanceTime();
 
@@ -770,7 +683,6 @@
             let winnerName = "なし";
             let winnerScore = 0;
             let winnerId = null;
-            let winnerPhoto = null;
 
             const roomRef = api.doc('rooms', currentRoomId);
             const roomSnap = await api.getDoc(roomRef);
@@ -782,7 +694,6 @@
                     winnerScore = p.lastChanceScore;
                     winnerName = p.name;
                     winnerId = p.id;
-                    winnerPhoto = p.lastChancePhoto || null;
                 }
             });
 
@@ -791,7 +702,6 @@
                 showChanceResult: true,
                 chanceWinnerName: winnerName,
                 chanceWinnerScore: winnerScore,
-                chanceWinnerPhoto: winnerPhoto,
                 nextRiggedPlayerId: winnerId // Set up rigging for next draw
             });
         }
@@ -810,13 +720,6 @@
         }
 
         window.startCameraMode = async () => {
-            if (!aiModelsLoaded) {
-                alert("AIモデルの読み込み中です。少々お待ちください...");
-                // Force retry load
-                await loadAiModels();
-                if (!aiModelsLoaded) return alert("AIの読み込みに失敗しました。手動モードでお願いします。");
-            }
-
             document.getElementById('camera-select-phase').classList.add('hidden');
             document.getElementById('camera-active-phase').classList.remove('hidden');
             const video = document.getElementById('camera-feed');
@@ -841,6 +744,7 @@
         window.mashButton = () => {
             mashCounter++;
             document.getElementById('mash-count').innerText = mashCounter;
+            // Visual feedback
             const btn = document.getElementById('mash-btn');
             btn.style.transform = "scale(0.95)";
             setTimeout(() => btn.style.transform = "scale(1)", 50);
@@ -867,61 +771,15 @@
 
         async function submitScore(isCamera) {
             document.getElementById('camera-status').classList.remove('hidden');
-            document.getElementById('camera-status').innerText = "AI分析中...";
+            document.getElementById('camera-status').innerText = "採点中...";
+            if (videoStream) videoStream.getTracks().forEach(track => track.stop());
 
-            let photoData = null;
             let score = 0;
-
             if (isCamera) {
-                const video = document.getElementById('camera-feed');
-                const canvas = document.getElementById('camera-canvas');
-
-                // 1. Capture Photo
-                canvas.width = 300;
-                canvas.height = 300 * (video.videoHeight / video.videoWidth);
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                photoData = canvas.toDataURL('image/jpeg', 0.5);
-
-                // 2. AI Analysis
-                let detectionScore = 0;
-                try {
-                    // Use TinyFaceDetector for speed on mobile
-                    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
-
-                    if (detection) {
-                        const expressions = detection.expressions;
-                        const targetKey = currentEmotionTargetKey || 'happy';
-                        const probability = expressions[targetKey] || 0;
-
-                        // Score calculation: probability (0-1) * 100 + bonus
-                        // e.g. 90% smile -> 90 + 10 = 100
-                        // detectionScore = Math.floor(probability * 100);
-
-                        // New (More generous)
-                        // Boost logic: 1.5x multiplier. If probability > 0.6, it becomes max.
-                        detectionScore = Math.min(100, Math.floor(probability * 150));
-
-                        console.log(`Emotion: ${targetKey}, Prob: ${probability}, Score: ${detectionScore}`);
-                    } else {
-                        console.log("No face detected");
-                    }
-                } catch (e) {
-                    console.error("AI Detect Error", e);
-                }
-
-                // Stop Stream
-                if (videoStream) videoStream.getTracks().forEach(track => track.stop());
-
-                // Base score logic: AI score (0-100) + Participation Bonus (20)
-                // Cap at 100, min 30 (for just showing face)
-                // score = Math.min(100, Math.max(30, detectionScore + 20));
-
-                // New
-                // Base 40 points for just detecting a face successfully
-                score = Math.min(100, Math.max(40, detectionScore + 30));
-
+                // High score range: 60-100
+                score = Math.floor(Math.random() * 41) + 60;
             } else {
+                // Low/Med score range based on taps: max 80
                 score = Math.min(80, Math.floor(mashCounter * 3) + Math.floor(Math.random() * 20));
             }
 
@@ -931,9 +789,7 @@
             const chanceId = roomSnap.data().chanceId;
 
             await api.updateDoc(api.doc('rooms', currentRoomId, 'players', authUser.uid), {
-                lastChanceId: chanceId,
-                lastChanceScore: score,
-                lastChancePhoto: photoData
+                lastChanceId: chanceId, lastChanceScore: score
             });
 
             setTimeout(() => {
@@ -997,6 +853,7 @@
             const isPunched = (n) => n === 0 || localDrawnNumbers.has(n);
             const bingoCells = [];
 
+            // Rows, Cols, Diags
             const checkLine = (line) => {
                 if (line.every(isPunched)) {
                     bingoLines++;
@@ -1017,6 +874,8 @@
             }
 
             if (bingoLines > 0) {
+                // If newly bingo or bingo count increased
+                // Check if already declared bingo to prevent spamming
                 const pRef = api.doc('rooms', currentRoomId, 'players', authUser.uid);
                 const pSnap = await api.getDoc(pRef);
                 const currentBingo = pSnap.data().bingo;
