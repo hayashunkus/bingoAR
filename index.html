@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="ja">
-<!--AI表情検知を組み込み-->>
 
 <head>
     <meta charset="UTF-8">
@@ -169,18 +168,21 @@
             <!-- Game View -->
             <div id="game-view" class="hidden flex flex-col h-full">
                 <!-- Status Bar -->
-                <div
-                    class="bg-white rounded-xl shadow-lg p-6 mb-4 text-center border-4 border-yellow-100 relative overflow-hidden">
+                <div class="bg-white rounded-xl shadow-lg p-4 mb-4 border-4 border-yellow-100 relative overflow-hidden">
                     <div class="absolute top-0 left-0 w-full h-2 bg-gray-200">
                         <div id="chance-progress-bar" class="h-full bg-pink-500 transition-all duration-500"
                             style="width: 0%"></div>
                     </div>
-                    <p class="text-sm text-gray-500 mt-1 font-bold">現在の数字</p>
-                    <!-- Responsive Text Size -->
-                    <div id="current-number-display"
-                        class="text-7xl sm:text-8xl md:text-9xl font-black text-slate-800 py-6 min-h-[160px] flex items-center justify-center leading-none tracking-tight">
-                        --
+
+                    <!-- Updated Layout: Side-by-side to prevent vertical squash -->
+                    <div class="flex items-center justify-center gap-6 py-6 min-h-[140px]">
+                        <p class="text-sm sm:text-lg text-gray-500 font-bold text-right leading-tight">現在の<br>数字</p>
+                        <div id="current-number-display"
+                            class="text-7xl sm:text-8xl md:text-9xl font-black text-slate-800 leading-none tracking-tight">
+                            --
+                        </div>
                     </div>
+
                     <!-- Master view status -->
                     <div id="master-chance-status"
                         class="hidden absolute inset-0 bg-pink-500 flex items-center justify-center flex-col text-white z-20">
@@ -750,8 +752,8 @@
             const emotion = EMOTIONS[Math.floor(Math.random() * EMOTIONS.length)];
             const chanceId = Date.now().toString();
 
-            // 制限時間を20秒に延長（カメラ許可などの時間を考慮）
-            const DURATION = 20000;
+            // 制限時間を30秒に延長（カメラ許可などの時間を考慮）
+            const DURATION = 30000;
 
             await api.updateDoc(api.doc('rooms', currentRoomId), {
                 chanceActive: true,
