@@ -58,6 +58,28 @@
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
+
+        /* 点数表示のアニメーション */
+        @keyframes pop-in {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+
+            80% {
+                transform: scale(1.1);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .score-pop {
+            animation: pop-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
     </style>
 </head>
 
@@ -177,7 +199,6 @@
                     <!-- Layout: Side-by-side with Adjusted Font Size -->
                     <div class="flex items-center justify-center gap-6 py-6 min-h-[140px]">
                         <p class="text-sm sm:text-lg text-gray-500 font-bold text-right leading-tight">現在の<br>数字</p>
-                        <!-- Font size adjusted to 5xl/6xl/7xl -->
                         <div id="current-number-display"
                             class="text-5xl sm:text-6xl md:text-7xl font-black text-slate-800 leading-none tracking-tight">
                             --
@@ -260,7 +281,7 @@
                     <button onclick="startCameraMode()"
                         class="w-full bg-pink-500 text-white font-bold py-4 rounded-xl mb-3 shadow-lg flex items-center justify-center">
                         <i class="fa-solid fa-camera text-2xl mr-2"></i> AI表情採点で挑戦<br><span
-                            class="text-xs font-normal ml-2">(AIが顔を分析します)</span>
+                            class="text-xs font-normal ml-2">(高得点チャンス!)</span>
                     </button>
                     <button onclick="startManualMode()"
                         class="w-full bg-gray-700 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center">
@@ -276,6 +297,15 @@
                     <!-- Hidden canvas for capturing photo -->
                     <canvas id="camera-canvas" class="hidden"></canvas>
 
+                    <!-- My Score Display (Overlaid after shot) -->
+                    <div id="my-score-overlay"
+                        class="hidden absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white z-20">
+                        <p class="text-lg font-bold mb-2">あなたの表情</p>
+                        <div class="text-7xl font-black text-yellow-400 drop-shadow-lg score-pop"><span
+                                id="my-score-value">0</span><span class="text-3xl">点</span></div>
+                        <p id="my-score-msg" class="text-sm mt-4 animate-pulse">送信完了！結果発表を待っています...</p>
+                    </div>
+
                     <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div id="countdown-overlay" class="text-9xl font-bold text-white drop-shadow-lg opacity-80">5
                         </div>
@@ -286,7 +316,16 @@
                 </div>
 
                 <!-- Manual Phase -->
-                <div id="manual-active-phase" class="hidden w-full max-w-sm text-center">
+                <div id="manual-active-phase" class="hidden w-full max-w-sm text-center relative">
+                    <!-- Manual Score Overlay -->
+                    <div id="manual-score-overlay"
+                        class="hidden absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white z-20 rounded-xl">
+                        <p class="text-lg font-bold mb-2">連打結果</p>
+                        <div class="text-6xl font-black text-yellow-400 drop-shadow-lg score-pop"><span
+                                id="manual-score-value">0</span><span class="text-2xl">点</span></div>
+                        <p class="text-sm mt-4 animate-pulse">送信完了！待機中...</p>
+                    </div>
+
                     <p class="text-white mb-4">ボタンを連打してアピールしろ！</p>
                     <button id="mash-btn" onclick="mashButton()"
                         class="w-40 h-40 rounded-full bg-yellow-500 border-b-8 border-yellow-700 active:border-b-0 active:translate-y-2 text-white font-black text-2xl shadow-xl transition-all">
@@ -296,12 +335,7 @@
                 </div>
 
                 <div id="camera-status" class="text-white mt-4 font-bold text-lg animate-pulse hidden text-center">
-                    AI分析中...<br><span class="text-sm font-normal">結果送信までお待ちください</span>
-                </div>
-                <!-- Status when waiting for others (Kept for 2s delay) -->
-                <div id="camera-waiting-others" class="text-white mt-4 font-bold text-lg hidden text-center">
-                    <i class="fa-solid fa-check-circle text-green-400 text-4xl mb-2"></i><br>
-                    送信完了！<br><span class="text-sm font-normal animate-pulse">他のプレイヤーを待っています...</span>
+                    採点中...
                 </div>
             </div>
 
@@ -700,11 +734,11 @@
                     document.getElementById('chance-emotion-display').innerText = `お題: ${data.chanceTarget}`;
                 }
             } else {
-                // Game Over - Handle Transition
+                // Game Over - Handle Transition Logic
+                // If the user is currently viewing "My Score", wait until timer expires
                 const now = Date.now();
                 const timeRemaining = Math.max(0, scoreViewTill - now);
 
-                // If user is currently viewing score, delay the hide/transition
                 if (timeRemaining > 0) {
                     setTimeout(() => {
                         hideCameraAndShowResult(data);
@@ -723,7 +757,9 @@
             document.getElementById('camera-modal').classList.add('hidden');
             document.getElementById('camera-modal').classList.remove('flex');
             document.getElementById('camera-status').classList.add('hidden');
-            document.getElementById('camera-waiting-others').classList.add('hidden');
+            // Hide all score overlays
+            document.getElementById('my-score-overlay').classList.add('hidden');
+            document.getElementById('manual-score-overlay').classList.add('hidden');
 
             if (data.showChanceResult) {
                 if (document.getElementById('chance-result-modal').classList.contains('hidden')) {
@@ -825,6 +861,7 @@
                 chanceId: chanceId,
                 chanceEndsAt: Date.now() + DURATION
             });
+            // End slightly later to allow clients to finish viewing scores
             setTimeout(() => endChanceTime(), DURATION + 2000);
         };
         window.forceEndChance = () => endChanceTime();
@@ -880,7 +917,10 @@
             document.getElementById('camera-active-phase').classList.add('hidden');
             document.getElementById('manual-active-phase').classList.add('hidden');
             document.getElementById('camera-status').classList.add('hidden');
-            document.getElementById('camera-waiting-others').classList.add('hidden');
+            // Hide overlays initially
+            document.getElementById('my-score-overlay').classList.add('hidden');
+            document.getElementById('manual-score-overlay').classList.add('hidden');
+
             document.getElementById('camera-emotion-target').innerText = target;
             document.getElementById('camera-modal').classList.remove('hidden');
             document.getElementById('camera-modal').classList.add('flex');
@@ -937,6 +977,7 @@
                         setTimeout(() => document.getElementById('camera-flash').style.opacity = 0, 200);
                     }
 
+                    // Delay heavy processing slightly
                     setTimeout(() => {
                         submitScore(isCamera);
                     }, 100);
@@ -962,7 +1003,7 @@
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 photoData = canvas.toDataURL('image/jpeg', 0.5);
 
-                // 2. AI Analysis
+                // 2. AI Analysis (Generous Scoring)
                 let detectionScore = 0;
                 try {
                     const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
@@ -973,28 +1014,45 @@
                         const probability = expressions[targetKey] || 0;
 
                         let baseScore = Math.floor(probability * 100);
-                        let variation = Math.floor(Math.random() * 11) - 5;
-
-                        detectionScore = Math.min(100, Math.floor((baseScore * 1.2) + variation));
+                        // Boost logic: Even low prob gets good score. 
+                        // If prob is 0.5 (50%), score is 50 + 25 = 75.
+                        detectionScore = 50 + Math.floor(probability * 50);
                         console.log(`Emotion: ${targetKey}, Prob: ${probability}, Score: ${detectionScore}`);
                     }
                 } catch (e) { console.error("AI Detect Error", e); }
 
                 if (videoStream) videoStream.getTracks().forEach(track => track.stop());
 
-                let randomBonus = Math.floor(Math.random() * 10);
-                score = Math.min(100, Math.max(40, detectionScore + 20 + randomBonus));
+                // Final Score Logic:
+                // Base: If face detected (detectionScore > 0), score is 50-100.
+                // If no face: random fallback 50-90 (Generous)
+                if (detectionScore > 0) {
+                    let randomBonus = Math.floor(Math.random() * 21) - 10; // +/- 10
+                    score = Math.min(100, Math.max(60, detectionScore + randomBonus));
+                } else {
+                    score = Math.floor(Math.random() * 41) + 50; // 50-90
+                }
 
             } else {
-                score = Math.min(80, Math.floor(mashCounter * 3) + Math.floor(Math.random() * 10));
+                // Manual mash score
+                score = Math.min(90, Math.floor(mashCounter * 4) + Math.floor(Math.random() * 20));
             }
 
-            document.getElementById('camera-status').innerText = `${score}点 送信完了!`;
+            // SHOW SCORE OVERLAY (3 Seconds)
+            document.getElementById('camera-status').classList.add('hidden');
+            if (isCamera) {
+                document.getElementById('my-score-value').innerText = score;
+                document.getElementById('my-score-overlay').classList.remove('hidden');
+            } else {
+                document.getElementById('manual-score-value').innerText = score;
+                document.getElementById('manual-score-overlay').classList.remove('hidden');
+            }
 
-            // Set 2s timer
-            scoreViewTill = Date.now() + 2000;
+            // Set global timer for when this view should close
+            // This ensures user sees score for 3s even if backend ends early
+            scoreViewTill = Date.now() + 3000;
 
-            // SEND DATA IMMEDIATELY
+            // SEND DATA IMMEDIATELY (Background)
             const roomSnap = await api.getDoc(api.doc('rooms', currentRoomId));
             const chanceId = roomSnap.data().chanceId;
 
@@ -1004,13 +1062,8 @@
                 lastChancePhoto: photoData
             });
 
-            // Only update text after 2s if still open
-            setTimeout(() => {
-                if (!document.getElementById('camera-modal').classList.contains('hidden')) {
-                    document.getElementById('camera-status').classList.add('hidden');
-                    document.getElementById('camera-waiting-others').classList.remove('hidden');
-                }
-            }, 2000);
+            // No auto-close here. `handleRoomUpdate` will close this modal
+            // when `chanceActive` becomes false AND `scoreViewTill` has passed.
         }
 
         // --- BINGO LOGIC ---
