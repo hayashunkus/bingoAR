@@ -199,6 +199,7 @@
                     <!-- Layout: Side-by-side with Adjusted Font Size -->
                     <div class="flex items-center justify-center gap-6 py-6 min-h-[140px]">
                         <p class="text-sm sm:text-lg text-gray-500 font-bold text-right leading-tight">現在の<br>数字</p>
+                        <!-- Font size adjusted -->
                         <div id="current-number-display"
                             class="text-5xl sm:text-6xl md:text-7xl font-black text-slate-800 leading-none tracking-tight">
                             --
@@ -281,7 +282,7 @@
                     <button onclick="startCameraMode()"
                         class="w-full bg-pink-500 text-white font-bold py-4 rounded-xl mb-3 shadow-lg flex items-center justify-center">
                         <i class="fa-solid fa-camera text-2xl mr-2"></i> AI表情採点で挑戦<br><span
-                            class="text-xs font-normal ml-2">(高得点チャンス!)</span>
+                            class="text-xs font-normal ml-2">(AIが顔を分析します)</span>
                     </button>
                     <button onclick="startManualMode()"
                         class="w-full bg-gray-700 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center">
@@ -335,7 +336,7 @@
                 </div>
 
                 <div id="camera-status" class="text-white mt-4 font-bold text-lg animate-pulse hidden text-center">
-                    採点中...
+                    AI分析中...
                 </div>
             </div>
 
@@ -548,6 +549,7 @@
         let currentEmotionTargetKey = '';
         let currentRoomChanceId = null; // Store for checking completion
         let scoreViewTill = 0; // Timestamp when minimum score viewing time ends
+        let isProcessingChance = false; // Prevent double submission/freeze
 
         const MAX_NUMBER = 50;
         const CHANCE_INTERVAL = 3;
@@ -728,6 +730,8 @@
                 } else if (!isFinished) { // Don't show chance to finished players
                     if (data.chanceId !== lastPlayedChanceId) {
                         lastPlayedChanceId = data.chanceId;
+                        // Reset processing flag
+                        isProcessingChance = false;
                         showChanceSelection(data.chanceTarget);
                     }
                     document.getElementById('chance-indicator').classList.remove('hidden');
@@ -861,7 +865,6 @@
                 chanceId: chanceId,
                 chanceEndsAt: Date.now() + DURATION
             });
-            // End slightly later to allow clients to finish viewing scores
             setTimeout(() => endChanceTime(), DURATION + 2000);
         };
         window.forceEndChance = () => endChanceTime();
@@ -955,6 +958,7 @@
         };
 
         window.mashButton = () => {
+            if (isProcessingChance) return; // Prevent mashing during submission
             mashCounter++;
             document.getElementById('mash-count').innerText = mashCounter;
             const btn = document.getElementById('mash-btn');
@@ -986,8 +990,12 @@
         }
 
         async function submitScore(isCamera) {
+            if (isProcessingChance) return;
+            isProcessingChance = true; // Lock
+
+            // 1. Show "Analyzing..." state
             document.getElementById('camera-status').classList.remove('hidden');
-            document.getElementById('camera-status').innerText = "AI分析中...";
+            document.getElementById('camera-status').innerText = isCamera ? "AI分析中..." : "集計中...";
 
             let photoData = null;
             let score = 0;
@@ -996,14 +1004,17 @@
                 const video = document.getElementById('camera-feed');
                 const canvas = document.getElementById('camera-canvas');
 
-                // 1. Capture Photo
+                // Capture Photo
                 canvas.width = 300;
                 canvas.height = 300 * (video.videoHeight / video.videoWidth);
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 photoData = canvas.toDataURL('image/jpeg', 0.5);
 
-                // 2. AI Analysis (Generous Scoring)
+                // Simulate "Thinking" time for 1.5s
+                await new Promise(r => setTimeout(r, 1500));
+
+                // AI Analysis (Real values)
                 let detectionScore = 0;
                 try {
                     const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
@@ -1013,32 +1024,34 @@
                         const targetKey = currentEmotionTargetKey || 'happy';
                         const probability = expressions[targetKey] || 0;
 
-                        let baseScore = Math.floor(probability * 100);
-                        // Boost logic: Even low prob gets good score. 
-                        // If prob is 0.5 (50%), score is 50 + 25 = 75.
-                        detectionScore = 50 + Math.floor(probability * 50);
-                        console.log(`Emotion: ${targetKey}, Prob: ${probability}, Score: ${detectionScore}`);
+                        // Raw Probability Score (0-100)
+                        let rawScore = Math.floor(probability * 100);
+
+                        // Mild Boost (1.1x) + Small Randomness
+                        detectionScore = Math.min(100, Math.floor(rawScore * 1.1) + Math.floor(Math.random() * 6));
+
+                        console.log(`Emotion: ${targetKey}, Prob: ${probability}, Raw: ${rawScore}, Final: ${detectionScore}`);
                     }
                 } catch (e) { console.error("AI Detect Error", e); }
 
                 if (videoStream) videoStream.getTracks().forEach(track => track.stop());
 
-                // Final Score Logic:
-                // Base: If face detected (detectionScore > 0), score is 50-100.
-                // If no face: random fallback 50-90 (Generous)
+                // Score Logic
                 if (detectionScore > 0) {
-                    let randomBonus = Math.floor(Math.random() * 21) - 10; // +/- 10
-                    score = Math.min(100, Math.max(60, detectionScore + randomBonus));
+                    // Success: 10 - 100 (Based on AI)
+                    score = Math.max(10, detectionScore);
                 } else {
-                    score = Math.floor(Math.random() * 41) + 50; // 50-90
+                    // Fail (No face / Wrong expression): 20 - 50 Random
+                    score = Math.floor(Math.random() * 31) + 20;
                 }
 
             } else {
                 // Manual mash score
-                score = Math.min(90, Math.floor(mashCounter * 4) + Math.floor(Math.random() * 20));
+                await new Promise(r => setTimeout(r, 1000));
+                score = Math.min(80, Math.floor(mashCounter * 4) + Math.floor(Math.random() * 10));
             }
 
-            // SHOW SCORE OVERLAY (3 Seconds)
+            // 2. SHOW SCORE OVERLAY (3 Seconds)
             document.getElementById('camera-status').classList.add('hidden');
             if (isCamera) {
                 document.getElementById('my-score-value').innerText = score;
@@ -1049,7 +1062,6 @@
             }
 
             // Set global timer for when this view should close
-            // This ensures user sees score for 3s even if backend ends early
             scoreViewTill = Date.now() + 3000;
 
             // SEND DATA IMMEDIATELY (Background)
@@ -1062,8 +1074,14 @@
                 lastChancePhoto: photoData
             });
 
-            // No auto-close here. `handleRoomUpdate` will close this modal
-            // when `chanceActive` becomes false AND `scoreViewTill` has passed.
+            // Wait 3s then check if we need to show waiting msg
+            setTimeout(() => {
+                if (!document.getElementById('camera-modal').classList.contains('hidden')) {
+                    // Only show waiting if master hasn't closed it yet
+                    document.getElementById('my-score-msg').innerText = "他のプレイヤーを待っています...";
+                    document.getElementById('manual-score-overlay').querySelector('p:last-child').innerText = "他のプレイヤーを待っています...";
+                }
+            }, 3000);
         }
 
         // --- BINGO LOGIC ---
