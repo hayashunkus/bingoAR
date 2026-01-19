@@ -117,10 +117,11 @@
                          <div id="chance-progress-bar" class="h-full bg-pink-500 transition-all duration-500" style="width: 0%"></div>
                     </div>
                     
-                    <!-- Layout: Side-by-side -->
-                    <div class="flex items-center justify-center gap-6 py-6 min-h-[140px]">
+                    <!-- Layout: Side-by-side with Adjusted Font Size -->
+                    <div class="flex items-center justify-center gap-6 py-6 min-h-[120px]">
                         <p class="text-sm sm:text-lg text-gray-500 font-bold text-right leading-tight">現在の<br>数字</p>
-                        <div id="current-number-display" class="text-7xl sm:text-8xl md:text-9xl font-black text-slate-800 leading-none tracking-tight">
+                        <!-- Font size reduced from 9xl to 6xl/7xl for better fit -->
+                        <div id="current-number-display" class="text-6xl sm:text-7xl md:text-8xl font-black text-slate-800 leading-none tracking-tight">
                             --
                         </div>
                     </div>
@@ -217,8 +218,13 @@
                     <p id="mash-count" class="text-white text-3xl mt-4 font-bold">0</p>
                 </div>
                 
-                <div id="camera-status" class="text-white mt-4 font-bold text-lg animate-pulse hidden">
-                    AI分析中...
+                <div id="camera-status" class="text-white mt-4 font-bold text-lg animate-pulse hidden text-center">
+                    AI分析中...<br><span class="text-sm font-normal">結果送信までお待ちください</span>
+                </div>
+                <!-- Status when waiting for others -->
+                <div id="camera-waiting-others" class="text-white mt-4 font-bold text-lg hidden text-center">
+                    <i class="fa-solid fa-check-circle text-green-400 text-4xl mb-2"></i><br>
+                    送信完了！<br><span class="text-sm font-normal animate-pulse">他のプレイヤーを集計中...</span>
                 </div>
             </div>
 
@@ -576,7 +582,7 @@
                                 console.log("All players answered. Ending chance time.");
                                 endChanceTime();
                                 checkCompletionTimeout = null;
-                            }, 2000);
+                            }, 500); // 2000 -> 500ms
                         }
                     }
                 }
@@ -613,6 +619,8 @@
                 document.getElementById('camera-modal').classList.add('hidden');
                 document.getElementById('chance-indicator').classList.add('hidden');
                 document.getElementById('master-chance-status').classList.add('hidden');
+                document.getElementById('camera-status').classList.add('hidden');
+                document.getElementById('camera-waiting-others').classList.add('hidden');
                 checkCompletionTimeout = null; // Clear any pending auto-end
             }
 
@@ -768,6 +776,7 @@
             document.getElementById('camera-active-phase').classList.add('hidden');
             document.getElementById('manual-active-phase').classList.add('hidden');
             document.getElementById('camera-status').classList.add('hidden');
+            document.getElementById('camera-waiting-others').classList.add('hidden');
             document.getElementById('camera-emotion-target').innerText = target;
             document.getElementById('camera-modal').classList.remove('hidden');
             document.getElementById('camera-modal').classList.add('flex');
@@ -824,7 +833,11 @@
                         document.getElementById('camera-flash').style.opacity = 1;
                         setTimeout(() => document.getElementById('camera-flash').style.opacity = 0, 200);
                     }
-                    submitScore(isCamera);
+                    
+                    // Delay heavy processing slightly to prevent UI freeze during flash
+                    setTimeout(() => {
+                        submitScore(isCamera);
+                    }, 100);
                 }
             }, 1000);
         }
@@ -889,7 +902,9 @@
                 score = Math.min(80, Math.floor(mashCounter * 3) + Math.floor(Math.random() * 20));
             }
             
-            document.getElementById('camera-status').innerText = `${score}点 送信完了!`;
+            // Switch UI to "Waiting for others"
+            document.getElementById('camera-status').classList.add('hidden');
+            document.getElementById('camera-waiting-others').classList.remove('hidden');
             
             const roomSnap = await api.getDoc(api.doc('rooms', currentRoomId));
             const chanceId = roomSnap.data().chanceId;
@@ -899,11 +914,8 @@
                 lastChanceScore: score,
                 lastChancePhoto: photoData
             });
-
-            setTimeout(() => {
-                document.getElementById('camera-modal').classList.add('hidden');
-                document.getElementById('camera-modal').classList.remove('flex');
-            }, 1500);
+            
+            // Modal stays open showing "Waiting..." until master closes it (via room update)
         }
 
         // --- BINGO LOGIC ---
