@@ -199,7 +199,6 @@
                     <!-- Layout: Side-by-side with Adjusted Font Size -->
                     <div class="flex items-center justify-center gap-6 py-6 min-h-[140px]">
                         <p class="text-sm sm:text-lg text-gray-500 font-bold text-right leading-tight">現在の<br>数字</p>
-                        <!-- Font size adjusted -->
                         <div id="current-number-display"
                             class="text-5xl sm:text-6xl md:text-7xl font-black text-slate-800 leading-none tracking-tight">
                             --
@@ -213,7 +212,7 @@
                         <div class="mt-2 text-sm text-center">
                             <p>完了人数: <span id="answered-count" class="font-bold text-2xl">0</span> / <span
                                     id="active-count" class="font-bold">0</span></p>
-                            <p class="text-xs opacity-75">全員完了後、自動で結果発表へ進みます</p>
+                            <p class="text-xs opacity-75">生存確認中のプレイヤーのみ集計します</p>
                         </div>
                         <button onclick="forceEndChance()"
                             class="mt-4 bg-white text-pink-500 px-4 py-2 rounded-full text-xs font-bold shadow hover:bg-gray-100">
@@ -551,9 +550,12 @@
         let scoreViewTill = 0; // Timestamp when minimum score viewing time ends
         let isProcessingChance = false; // Prevent double submission/freeze
         let chanceTimerId = null; // Timer ID for master timeout
+        let heartbeatTimer = null; // Heartbeat interval
 
         const MAX_NUMBER = 50;
         const CHANCE_INTERVAL = 3;
+        const HEARTBEAT_INTERVAL = 30000; // 30s
+        const OFFLINE_THRESHOLD = 90000; // 90s
         const EMOTIONS = [
             { id: 'laugh', label: '大爆笑', key: 'happy' },
             { id: 'cry', label: '泣き顔', key: 'sad' },
@@ -609,6 +611,7 @@
                 isMaster = true; currentRoomId = roomId;
                 document.getElementById('display-room-id').innerText = roomId;
                 setupRoomListeners(roomId); switchView('waiting');
+                startHeartbeat(roomId);
                 document.getElementById('master-controls-waiting').classList.remove('hidden');
                 document.getElementById('master-game-controls').classList.remove('hidden');
                 document.getElementById('player-card-area').classList.add('hidden');
@@ -628,10 +631,26 @@
                     name: username, card: myCard.flat(), joinedAt: api.serverTimestamp(), score: 0, bingo: false, finished: false
                 });
                 currentRoomId = roomId; isMaster = false; renderBingoCard(myCard); setupRoomListeners(roomId); switchView('waiting');
+                startHeartbeat(roomId);
                 document.getElementById('player-msg-waiting').classList.remove('hidden');
                 document.getElementById('player-card-area').classList.remove('hidden');
             } catch (e) { console.error(e); alert("参加失敗"); }
         };
+
+        // --- HEARTBEAT SYSTEM ---
+        function startHeartbeat(roomId) {
+            if (heartbeatTimer) clearInterval(heartbeatTimer);
+            const doHeartbeat = async () => {
+                if (!authUser || !roomId) return;
+                try {
+                    await api.updateDoc(api.doc('rooms', roomId, 'players', authUser.uid), {
+                        lastActive: api.serverTimestamp()
+                    });
+                } catch (e) { console.warn("Heartbeat error", e); }
+            };
+            doHeartbeat();
+            heartbeatTimer = setInterval(doHeartbeat, HEARTBEAT_INTERVAL);
+        }
 
         // --- QUIT GAME FUNCTION ---
         window.quitGame = () => {
@@ -649,6 +668,7 @@
                 const data = doc.data();
                 currentRoomChanceId = data.chanceActive ? data.chanceId : null; // Update current chance ID
                 handleRoomUpdate(data);
+                // Safety Timeout (e.g. 5 min) only for master to cleanup
                 if (isMaster && data.chanceActive && data.chanceEndsAt && Date.now() > data.chanceEndsAt + 5000) endChanceTime();
             });
 
@@ -661,25 +681,39 @@
                 // For completion check
                 let activePlayerCount = 0;
                 let answeredPlayerCount = 0;
+                const now = Date.now();
 
                 snapshot.forEach(p => {
                     const pData = p.data();
                     cachedPlayers.push({ id: p.id, ...pData });
                     playerCount++;
 
+                    // Offline Check
+                    let isOnline = true;
+                    // If lastActive exists, compare. If it doesn't (old user or just joined), assume online briefly
+                    if (pData.lastActive) {
+                        let lastActiveTime = 0;
+                        if (pData.lastActive.toMillis) lastActiveTime = pData.lastActive.toMillis();
+                        else if (typeof pData.lastActive === 'string') lastActiveTime = new Date(pData.lastActive).getTime();
+
+                        if (now - lastActiveTime > OFFLINE_THRESHOLD) isOnline = false;
+                    }
+
                     // List UI
                     const li = document.createElement('li');
-                    li.className = "bg-white p-2 rounded shadow-sm flex justify-between px-4 items-center";
+                    li.className = `bg-white p-2 rounded shadow-sm flex justify-between px-4 items-center ${!isOnline ? 'opacity-50 grayscale' : ''}`;
                     let statusHtml = '';
-                    if (pData.finished) statusHtml = '<span class="bg-gray-500 text-white text-xs px-2 py-1 rounded-full">上がり</span>';
+                    if (!isOnline) statusHtml = '<span class="text-xs text-gray-400">オフライン</span>';
+                    else if (pData.finished) statusHtml = '<span class="bg-gray-500 text-white text-xs px-2 py-1 rounded-full">上がり</span>';
                     else if (pData.bingo) statusHtml = '<span class="bg-yellow-400 text-white text-xs px-2 py-1 rounded-full animate-pulse">BINGO!</span>';
+
                     li.innerHTML = `<span class="font-bold">${pData.name}</span>${statusHtml}`;
                     listEl.appendChild(li);
 
                     if (pData.bingo || pData.finished) bingoCount++;
 
                     // Count active and answered
-                    if (!pData.finished) {
+                    if (!pData.finished && isOnline) {
                         activePlayerCount++;
                         if (currentRoomChanceId && pData.lastChanceId === currentRoomChanceId) {
                             answeredPlayerCount++;
