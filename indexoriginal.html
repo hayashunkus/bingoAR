@@ -199,7 +199,6 @@
                     <!-- Layout: Side-by-side with Adjusted Font Size -->
                     <div class="flex items-center justify-center gap-6 py-6 min-h-[140px]">
                         <p class="text-sm sm:text-lg text-gray-500 font-bold text-right leading-tight">現在の<br>数字</p>
-                        <!-- Font size adjusted to 5xl/6xl/7xl for better visibility -->
                         <div id="current-number-display"
                             class="text-5xl sm:text-6xl md:text-7xl font-black text-slate-800 leading-none tracking-tight">
                             --
@@ -213,7 +212,7 @@
                         <div class="mt-2 text-sm text-center">
                             <p>完了人数: <span id="answered-count" class="font-bold text-2xl">0</span> / <span
                                     id="active-count" class="font-bold">0</span></p>
-                            <p class="text-xs opacity-75">全員完了後、自動で結果発表へ進みます</p>
+                            <p class="text-xs opacity-75">生存確認中のプレイヤーのみ集計します</p>
                         </div>
                         <button onclick="forceEndChance()"
                             class="mt-4 bg-white text-pink-500 px-4 py-2 rounded-full text-xs font-bold shadow hover:bg-gray-100">
@@ -336,12 +335,7 @@
                 </div>
 
                 <div id="camera-status" class="text-white mt-4 font-bold text-lg animate-pulse hidden text-center">
-                    AI分析中...<br><span class="text-sm font-normal">結果送信までお待ちください</span>
-                </div>
-                <!-- Status when waiting for others -->
-                <div id="camera-waiting-others" class="text-white mt-4 font-bold text-lg hidden text-center">
-                    <i class="fa-solid fa-check-circle text-green-400 text-4xl mb-2"></i><br>
-                    送信完了！<br><span class="text-sm font-normal animate-pulse">他のプレイヤーを集計中...</span>
+                    AI分析中...
                 </div>
             </div>
 
@@ -557,8 +551,6 @@
         let isProcessingChance = false; // Prevent double submission/freeze
         let chanceTimerId = null; // Timer ID for master timeout
         let heartbeatTimer = null; // Heartbeat interval
-        let scanIntervalId = null; // ID for continuous scanning
-        let tempBestScore = 0; // Best score during scanning period
 
         const MAX_NUMBER = 50;
         const CHANCE_INTERVAL = 3;
@@ -698,6 +690,7 @@
 
                     // Offline Check
                     let isOnline = true;
+                    // If lastActive exists, compare. If it doesn't (old user or just joined), assume online briefly
                     if (pData.lastActive) {
                         let lastActiveTime = 0;
                         if (pData.lastActive.toMillis) lastActiveTime = pData.lastActive.toMillis();
@@ -993,7 +986,6 @@
                 videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
                 video.srcObject = videoStream;
                 startCountdown(true);
-                startScanning(); // Start continuous analysis
             } catch (e) {
                 alert("カメラが起動できません。手動モードに切り替えます。");
                 window.startManualMode();
@@ -1009,44 +1001,13 @@
         };
 
         window.mashButton = () => {
-            if (isProcessingChance) return;
+            if (isProcessingChance) return; // Prevent mashing during submission
             mashCounter++;
             document.getElementById('mash-count').innerText = mashCounter;
             const btn = document.getElementById('mash-btn');
             btn.style.transform = "scale(0.95)";
             setTimeout(() => btn.style.transform = "scale(1)", 50);
         };
-
-        function startScanning() {
-            tempBestScore = 0;
-            if (scanIntervalId) clearInterval(scanIntervalId);
-
-            // Scan every 300ms
-            scanIntervalId = setInterval(async () => {
-                const video = document.getElementById('camera-feed');
-                if (video.paused || video.ended || !isProcessingChance === false) return; // Stop if processing
-
-                try {
-                    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
-                    if (detection) {
-                        const expressions = detection.expressions;
-                        const targetKey = currentEmotionTargetKey || 'happy';
-                        const probability = expressions[targetKey] || 0;
-                        const score = Math.floor(probability * 100);
-
-                        // Update best score if higher
-                        if (score > tempBestScore) {
-                            tempBestScore = score;
-                            console.log(`New Best: ${tempBestScore}`);
-                        }
-                    }
-                } catch (e) { }
-            }, 300);
-        }
-
-        function stopScanning() {
-            if (scanIntervalId) clearInterval(scanIntervalId);
-        }
 
         function startCountdown(isCamera) {
             const overlay = document.getElementById('countdown-overlay');
@@ -1058,20 +1019,24 @@
                 if (isCamera) overlay.innerText = count;
                 if (count <= 0) {
                     clearInterval(timer);
-                    stopScanning(); // Stop scanning loop
                     if (isCamera) {
                         document.getElementById('camera-flash').style.opacity = 1;
                         setTimeout(() => document.getElementById('camera-flash').style.opacity = 0, 200);
                     }
-                    setTimeout(() => submitScore(isCamera), 100);
+
+                    // Delay heavy processing slightly
+                    setTimeout(() => {
+                        submitScore(isCamera);
+                    }, 100);
                 }
             }, 1000);
         }
 
         async function submitScore(isCamera) {
             if (isProcessingChance) return;
-            isProcessingChance = true;
+            isProcessingChance = true; // Lock
 
+            // 1. Show "Analyzing..." state
             document.getElementById('camera-status').classList.remove('hidden');
             document.getElementById('camera-status').innerText = isCamera ? "AI分析中..." : "集計中...";
 
@@ -1093,28 +1058,36 @@
                     // Simulate "Thinking" time for 1.5s
                     await new Promise(r => setTimeout(r, 1500));
 
-                    // Use the best score from continuous scanning
-                    let detectionScore = tempBestScore;
+                    // AI Analysis (Real values)
+                    let detectionScore = 0;
+                    try {
+                        const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
 
-                    // Fallback to one last check if best score is 0
-                    if (detectionScore === 0) {
-                        try {
-                            const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceExpressions();
-                            if (detection) {
-                                const probability = detection.expressions[currentEmotionTargetKey || 'happy'] || 0;
-                                detectionScore = Math.floor(probability * 100);
-                            }
-                        } catch (e) { }
-                    }
+                        if (detection) {
+                            const expressions = detection.expressions;
+                            const targetKey = currentEmotionTargetKey || 'happy';
+                            const probability = expressions[targetKey] || 0;
+
+                            // Raw Probability Score (0-100)
+                            let rawScore = Math.floor(probability * 100);
+
+                            // Mild Boost (1.1x) + Small Randomness
+                            detectionScore = Math.min(100, Math.floor(rawScore * 1.1) + Math.floor(Math.random() * 6));
+
+                            console.log(`Emotion: ${targetKey}, Prob: ${probability}, Raw: ${rawScore}, Final: ${detectionScore}`);
+                        }
+                    } catch (e) { console.error("AI Detect Error", e); }
 
                     if (videoStream) videoStream.getTracks().forEach(track => track.stop());
 
-                    // Final Score Logic (Direct AI mapping, no extreme bias)
+                    // Score Logic
                     if (detectionScore > 0) {
-                        score = detectionScore;
+                        // Success: Guarantee at least 60 points if face is detected
+                        // Range: 60 - 100
+                        score = Math.max(60, detectionScore);
                     } else {
-                        // Fail: Low score
-                        score = Math.floor(Math.random() * 21) + 10;
+                        // Fail (No face / Wrong expression): 20 - 50 Random
+                        score = Math.floor(Math.random() * 31) + 20;
                     }
 
                 } else {
@@ -1123,7 +1096,7 @@
                     score = Math.min(80, Math.floor(mashCounter * 4) + Math.floor(Math.random() * 10));
                 }
 
-                // Show Score
+                // 2. SHOW SCORE OVERLAY (3 Seconds)
                 document.getElementById('camera-status').classList.add('hidden');
                 if (isCamera) {
                     document.getElementById('my-score-value').innerText = score;
@@ -1133,11 +1106,14 @@
                     document.getElementById('manual-score-overlay').classList.remove('hidden');
                 }
 
+                // Set global timer for when this view should close
                 scoreViewTill = Date.now() + 3000;
 
+                // SEND DATA IMMEDIATELY (Background)
                 const roomSnap = await api.getDoc(api.doc('rooms', currentRoomId));
                 if (roomSnap.exists()) {
                     const chanceId = roomSnap.data().chanceId;
+
                     await api.updateDoc(api.doc('rooms', currentRoomId, 'players', authUser.uid), {
                         lastChanceId: chanceId,
                         lastChanceScore: score,
@@ -1145,8 +1121,10 @@
                     });
                 }
 
+                // Wait 3s then check if we need to show waiting msg
                 setTimeout(() => {
                     if (!document.getElementById('camera-modal').classList.contains('hidden')) {
+                        // Only show waiting if master hasn't closed it yet
                         document.getElementById('my-score-msg').innerText = "他のプレイヤーを待っています...";
                         if (document.getElementById('manual-score-overlay').querySelector('p:last-child')) {
                             document.getElementById('manual-score-overlay').querySelector('p:last-child').innerText = "他のプレイヤーを待っています...";
@@ -1156,6 +1134,7 @@
 
             } catch (error) {
                 console.error("Error in submitScore:", error);
+                // Fallback exit
                 document.getElementById('camera-modal').classList.add('hidden');
             }
         }
